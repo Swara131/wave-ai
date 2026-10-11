@@ -8,7 +8,11 @@ import {
 } from "@/lib/agents/runtime/execution-plan";
 import { assertBuilderAgentRequirementsReady } from "@/lib/agents/requirements/assert-ready";
 import type { AgentPlatformLifecycle, PlatformCheckResult } from "./lifecycle-types";
+import { evaluateExecutionCheck, evaluateOutputCheck } from "./evaluate-run-checks";
 import { verifyAgentPlatform } from "./verify-agent";
+import { isPromptEcho } from "@/lib/agents/runtime/model/task-intent";
+import type { RecordAnalysisResult } from "@/lib/agents/runtime/analysis/record-validation";
+import { resolveTestRunOutcome, type TestRunOutcome } from "./test-run-outcome";
 
 export interface TestSuiteResult {
   lifecycle: AgentPlatformLifecycle;
@@ -18,6 +22,8 @@ export interface TestSuiteResult {
   runError?: string | null;
   crmResult?: CrmUpdateResult;
   whatsappResult?: WhatsAppNotifyResult | null;
+  analysis?: RecordAnalysisResult | null;
+  outcome?: TestRunOutcome;
 }
 
 export async function runAgentTestSuite(
@@ -38,6 +44,7 @@ export async function runAgentTestSuite(
   let runStatus: string | undefined;
   let runSummary: string | null = null;
   let runError: string | null = null;
+  let analysis: RecordAnalysisResult | null = null;
 
   const task =
     params.task?.trim() ||
@@ -60,24 +67,22 @@ export async function runAgentTestSuite(
     runStatus = result.status;
     runSummary = result.summary ?? null;
     runError = result.error ?? null;
+    analysis = result.analysis ?? null;
 
-    const executionOk =
-      result.status === "completed" || result.status === "awaiting_approval";
-    executionCheck = {
-      id: "execution",
-      label: "Execution",
-      status: executionOk ? "pass" : "fail",
-      message: executionOk
-        ? result.status === "awaiting_approval"
-          ? "Agent ran and routed an action for approval."
-          : "Agent executed successfully."
-        : result.error ??
-          result.delivery?.error ??
-          result.delivery?.email?.error ??
-          result.delivery?.whatsapp?.error ??
-          "Agent execution failed.",
-      checkedAt: new Date().toISOString(),
-    };
+    const queryStep = result.steps.find((step) => step.key.includes("query_supabase"));
+    const toolFailed = result.steps.some((step) => step.status === "failed");
+
+    executionCheck = evaluateExecutionCheck({
+      status: result.status,
+      error:
+        result.error ??
+        result.delivery?.error ??
+        result.delivery?.email?.error ??
+        result.delivery?.whatsapp?.error,
+      summary: result.summary,
+      task,
+      toolFailed,
+    });
 
     const delivery = result.delivery;
     if (delivery?.whatsapp?.status === "failed") {
@@ -100,46 +105,41 @@ export async function runAgentTestSuite(
         fixLabel: "Configure email",
         checkedAt: new Date().toISOString(),
       };
-    } else if (delivery?.whatsapp?.status === "sent") {
-      outputCheck = {
-        id: "output",
-        label: "WhatsApp Notification",
-        status: "pass",
-        message: `Sent to ${delivery.whatsapp.destination ?? "recipient"}.`,
-        checkedAt: new Date().toISOString(),
-      };
-    } else if (delivery?.email?.status === "sent") {
-      outputCheck = {
-        id: "output",
-        label: "Email delivery",
-        status: "pass",
-        message: `Sent to ${delivery.email.destination ?? "recipient"}.`,
-        checkedAt: new Date().toISOString(),
-      };
-    } else if (result.summary?.trim()) {
-      outputCheck = {
-        id: "output",
-        label: "Output",
-        status: "pass",
-        message: "Agent produced output.",
-        checkedAt: new Date().toISOString(),
-      };
-    } else if (result.status === "completed") {
-      outputCheck = {
-        id: "output",
-        label: "Output",
-        status: "needs_attention",
-        message: "Execution completed but no summary output was recorded.",
-        checkedAt: new Date().toISOString(),
-      };
     } else {
-      outputCheck = {
-        id: "output",
-        label: "Output",
-        status: "fail",
-        message: "No output produced.",
-        checkedAt: new Date().toISOString(),
-      };
+      outputCheck = evaluateOutputCheck({
+        agent: params.agent,
+        status: result.status,
+        summary: result.summary,
+        task,
+        error: result.error,
+        analysis,
+      });
+      if (
+        delivery?.whatsapp?.status === "sent" &&
+        outputCheck.status === "pass"
+      ) {
+        outputCheck = {
+          ...outputCheck,
+          label: "WhatsApp Notification",
+          message: `Sent to ${delivery.whatsapp.destination ?? "recipient"}.`,
+        };
+      } else if (delivery?.email?.status === "sent" && outputCheck.status === "pass") {
+        outputCheck = {
+          ...outputCheck,
+          label: "Email delivery",
+          message: `Sent to ${delivery.email.destination ?? "recipient"}.`,
+        };
+      }
+    }
+
+    if (queryStep && isPromptEcho(result.summary ?? "", task)) {
+      executionCheck = evaluateExecutionCheck({
+        status: "failed",
+        error: "Runtime echoed the original prompt after querying data.",
+        summary: result.summary,
+        task,
+        toolFailed: true,
+      });
     }
   } catch (err) {
     runError = err instanceof Error ? err.message : "Test run failed.";
@@ -184,11 +184,20 @@ export async function runAgentTestSuite(
     });
   }
 
+  const outcome = resolveTestRunOutcome({
+    runStatus,
+    runError,
+    checks: lifecycle.checks,
+    analysis,
+  });
+
   return {
     lifecycle,
     runId,
     runStatus,
     runSummary,
     runError,
+    analysis,
+    outcome,
   };
 }

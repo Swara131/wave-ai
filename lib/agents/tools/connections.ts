@@ -98,12 +98,6 @@ export const PLATFORM_TOOL_PROVIDERS: ToolConnectionRequirement[] = [
     settingsPath: "/settings?tab=integrations&provider=web_search",
   },
   {
-    provider: "google_sheets",
-    label: "Google Sheets",
-    description: "Read and write Google Sheets (requires OAuth — coming soon).",
-    settingsPath: "/settings?tab=integrations&provider=google_sheets",
-  },
-  {
     provider: "x_api",
     label: "X (Twitter)",
     description: "Read posts and draft replies on X (requires X API credentials).",

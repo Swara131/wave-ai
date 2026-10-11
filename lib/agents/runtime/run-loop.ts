@@ -12,6 +12,10 @@ import {
   taskNeedsWebResearch,
   toolStepLabel,
 } from "./model/task-intent";
+import { taskNeedsRecordLookup } from "./data/resolve-query-source";
+import { formatQueryToolReport } from "./analysis/structured-report";
+import type { RecordAnalysisResult } from "./analysis/record-validation";
+import { analyzeRetrievedRecords } from "./analysis/record-validation";
 import { resolveActionType } from "./tools/definitions";
 import { assertToolEnabledForAgent } from "./tools/registry";
 import { executeAuthorizedTool } from "@/lib/safety/passport/execute-authorized";
@@ -28,6 +32,59 @@ import type {
 } from "./types";
 import type { RunAgentParams } from "./types";
 import { updateAgentRun } from "../runtime-repository";
+
+function parseToolPayload(content: string): {
+  executed: boolean;
+  output: Record<string, unknown>;
+  error?: string | null;
+} | null {
+  try {
+    const parsed = JSON.parse(content) as {
+      executed?: boolean;
+      output?: Record<string, unknown>;
+      error?: string | null;
+    };
+    if (!parsed || typeof parsed !== "object") return null;
+    return {
+      executed: Boolean(parsed.executed),
+      output: parsed.output ?? {},
+      error: parsed.error ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function lastQueryToolResult(messages: ModelMessage[]): {
+  toolName: string;
+  executed: boolean;
+  output: Record<string, unknown>;
+  error?: string | null;
+} | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role !== "tool") continue;
+    const payload = parseToolPayload(message.content);
+    if (!payload) continue;
+    const previous = messages[index - 1];
+    let toolName = "";
+    if (previous?.role === "assistant") {
+      try {
+        const parsed = JSON.parse(previous.content) as { toolName?: string };
+        toolName = typeof parsed.toolName === "string" ? parsed.toolName : "";
+      } catch {
+        toolName = "";
+      }
+    }
+    if (
+      payload.executed &&
+      (toolName === "query_supabase" || toolName === "query_database" || toolName === "google_sheets")
+    ) {
+      return { toolName, ...payload };
+    }
+  }
+  return null;
+}
 
 function toolResultMessage(outcome: {
   executed: boolean;
@@ -104,8 +161,26 @@ async function failRunOnToolError(params: {
   proposalId: string | null;
   toolCalls: number;
   turns: number;
+  analysis?: RecordAnalysisResult;
 }): Promise<RunAgentResult> {
   const friendly = toolFailureMessage(params.toolName, params.error);
+  const analysis =
+    params.analysis ??
+    (params.toolName === "query_supabase" || params.toolName === "query_database"
+      ? analyzeRetrievedRecords({
+          table: "agent_crm_updates",
+          rows: [],
+          agent: {
+            name: "agent",
+            goal: "",
+            description: "",
+            instructions: null,
+            safetySettings: {},
+          },
+          error: friendly,
+          tableAvailable: false,
+        })
+      : undefined);
 
   await params.activity.logRunStep({
     runId: params.runId,
@@ -135,6 +210,7 @@ async function failRunOnToolError(params: {
     toolCalls: params.toolCalls,
     turns: params.turns,
     steps: params.activity.getSteps(),
+    analysis,
     protection: {
       summary: friendly,
       details: {
@@ -186,7 +262,20 @@ export async function runAgentLoop(
       });
 
       if (turn.type === "complete") {
-        if (isPromptEcho(turn.message, params.task)) {
+        if (
+          taskNeedsRecordLookup(params.task, params.agent) &&
+          toolCalls === 0 &&
+          params.agent.enabledTools.includes("query_supabase")
+        ) {
+          messages.push({
+            role: "user",
+            content:
+              "You must call query_supabase first to fetch real records. Do not return the prompt or saved configuration.",
+          });
+          continue;
+        }
+
+        if (isPromptEcho(turn.message, params.task) && !lastQueryToolResult(messages)) {
           messages.push({
             role: "assistant",
             content: JSON.stringify({ type: "complete", rejected: true, message: turn.message }),
@@ -212,7 +301,21 @@ export async function runAgentLoop(
           continue;
         }
 
-        if (isFailureCompleteMessage(turn.message)) {
+        const queryResult = lastQueryToolResult(messages);
+        let finalMessage = turn.message;
+        let analysis: RecordAnalysisResult | undefined;
+        if (queryResult) {
+          const formatted = formatQueryToolReport({
+            toolOutput: queryResult.output,
+            agent: params.agent.record,
+            task: params.task,
+            toolError: queryResult.error,
+          });
+          finalMessage = formatted.text;
+          analysis = formatted.analysis;
+        }
+
+        if (isFailureCompleteMessage(turn.message) && !queryResult) {
           await params.activity.finishRun({
             runId: params.runId,
             status: "failed",
@@ -236,24 +339,32 @@ export async function runAgentLoop(
           runId: params.runId,
           key: "run.finished",
           label: "Run finished",
-          detail: "Task execution complete",
+          detail: analysis
+            ? analysis.empty
+              ? "Database is empty; 0 records analyzed"
+              : analysis.unavailable
+                ? "Database unavailable"
+                : `Analyzed ${analysis.analyzedCount} record(s)`
+            : "Task execution complete",
         });
 
         await params.activity.finishRun({
           runId: params.runId,
           status: "completed",
-          summary: turn.message,
+          summary: finalMessage,
+          metadata: analysis ? { analysis } : undefined,
         });
 
         return {
           runId: params.runId,
           status: "completed",
-          summary: turn.message,
+          summary: finalMessage,
           error: null,
           proposalId: null,
           toolCalls,
           turns,
           steps: params.activity.getSteps(),
+          analysis,
         };
       }
 

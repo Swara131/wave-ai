@@ -28,9 +28,11 @@ function buildTurnPrompt(request: ModelCompletionRequest): string {
     'or {"type":"tool_call","toolName":"tool_id","toolInput":{},"actionType":"optional","reasoning":"why"}',
     "",
     "Rules:",
-    "- Use tool_call when you need fresh data (news, research, email, files, etc.).",
-    "- Never repeat the task or say Completed: ... as your final answer.",
+    "- Use tool_call when you need fresh data (news, research, email, files, database records, tickets).",
+    "- For ticket, incident, or evidence tasks, call query_supabase against the ticket source. Never query the agents table for that work.",
+    "- Never repeat the task, saved configuration, or say Completed: ... as your final answer.",
     "- After tool results arrive, write the actual deliverable (summary, report, list).",
+    "- Never invent ticket IDs, evidence, or findings that were not returned by tools.",
     "- Format complete.message as Markdown (headings, lists, GFM tables with a --- separator row).",
     "- End with a Sources list only when the tools provided real URLs. Never invent links or facts.",
   ].join("\n");

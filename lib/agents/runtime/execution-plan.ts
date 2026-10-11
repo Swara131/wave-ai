@@ -92,11 +92,7 @@ export function deriveExecutableTaskFromSetup(params: {
     .replace(/^make an agent that\s*/i, "")
     .trim();
 
-  const answers = params.setupAnswers ?? {};
-  const extras = formatSetupAnswersForPrompt(answers);
-  if (!extras) return stripped.endsWith(".") ? stripped : `${stripped}.`;
-
-  return `${stripped.endsWith(".") ? stripped : `${stripped}.`}\n\nUse this saved configuration:\n${extras}`;
+  return stripped.endsWith(".") ? stripped : `${stripped}.`;
 }
 
 export function buildRuntimePlanPrompt(params: {

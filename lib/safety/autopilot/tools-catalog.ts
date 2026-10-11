@@ -78,15 +78,6 @@ export const AUTOPILOT_TOOL_CATALOG: AutopilotToolDefinition[] = [
     runtimeTools: ["github_push", "github_create_pr"],
   },
   {
-    id: "google_sheets",
-    label: "Google Sheets",
-    category: "Data",
-    isHighRisk: false,
-    defaultPermission: "read_only",
-    capabilityIds: ["google_sheets"],
-    runtimeTools: ["google_sheets"],
-  },
-  {
     id: "crm",
     label: "CRM",
     category: "Data",

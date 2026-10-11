@@ -148,6 +148,7 @@ export interface AgentWorkflowPersistenceState {
 import type { AgentPlatformLifecycle } from "./platform/lifecycle-types";
 import type { ExternalAgentConnection } from "./external/types";
 import type { SimulationRun } from "@/lib/templates/simulation/types";
+import type { AgentDataSourceConfig } from "./data-source/types";
 
 /** Per-agent protection settings (agents.safety_settings). */
 export interface AgentSafetySettings extends AgentSafetySettingsExtended {
@@ -193,6 +194,7 @@ export interface AgentSafetySettings extends AgentSafetySettingsExtended {
   simulationState?: {
     lastRun: SimulationRun | null;
   };
+  dataSource?: AgentDataSourceConfig;
 }
 
 export interface AgentRunLimits {

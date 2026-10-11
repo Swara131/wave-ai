@@ -2,7 +2,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { WorkflowGraphNode } from "@/lib/agents/workflow/types";
 import { isTwilioWhatsAppConfigured } from "@/lib/whatsapp/env";
 import { summarizeToolResultsForTask } from "./model/summarize-results";
+import { formatQueryToolReport } from "./analysis/structured-report";
+import type { RecordAnalysisResult } from "./analysis/record-validation";
 import { deriveWebSearchQuery } from "./model/task-intent";
+import { resolveDatabaseQueryInput } from "./data/resolve-query-source";
 import {
   destinationEmailFromAgent,
   destinationPhoneFromAgent,
@@ -49,7 +52,7 @@ function toolInputForNode(params: {
     return {
       to,
       subject: `${params.agent.record.name} result`,
-      message: params.summary || params.task,
+      message: params.summary || "No analysis result was produced yet.",
     };
   }
 
@@ -57,16 +60,14 @@ function toolInputForNode(params: {
     if (!isTwilioWhatsAppConfigured()) return { missing: "whatsapp_provider" };
     const to = destinationPhoneFromAgent(params.agent.record);
     if (!to) return { missing: "whatsapp" };
-    return { to, message: params.summary || params.task };
+    return { to, message: params.summary || "No analysis result was produced yet." };
   }
 
   if (toolName === "query_supabase") {
-    return {
-      table: "agents",
-      slug: params.agent.record.slug,
-      limit: 5,
+    return resolveDatabaseQueryInput({
+      agent: params.agent,
       task: params.task,
-    };
+    });
   }
 
   if (toolName === "update_crm_record") {
@@ -109,6 +110,7 @@ export async function runPersistedWorkflow(params: {
 }): Promise<RunAgentResult> {
   const nodes = sortedNodes(params.agent);
   let summary = params.initialSummary ?? "";
+  let analysis: RecordAnalysisResult | undefined;
   let lastToolName: string | null = params.initialLastToolName ?? null;
   let lastToolOutput: Record<string, unknown> = params.initialLastToolOutput ?? {};
   let toolCalls = params.initialToolCalls ?? 0;
@@ -142,15 +144,22 @@ export async function runPersistedWorkflow(params: {
     }
 
     if (node.category === "ai") {
-      if (lastToolName && Object.keys(lastToolOutput).length > 0) {
+      if (lastToolName === "query_supabase" || lastToolName === "query_database") {
+        const formatted = formatQueryToolReport({
+          toolOutput: lastToolOutput,
+          agent: params.agent.record,
+          task: params.task,
+        });
+        summary = formatted.text;
+        analysis = formatted.analysis;
+      } else if (lastToolName && Object.keys(lastToolOutput).length > 0 && !analysis) {
         summary = await summarizeToolResultsForTask({
           task: params.task,
           agentName: params.agent.record.name,
           toolName: lastToolName,
           toolOutput: lastToolOutput,
+          agentRecord: params.agent.record,
         });
-      } else if (!summary) {
-        summary = params.task;
       }
       await params.activity.logRunStep({
         runId: params.runId,
@@ -279,12 +288,26 @@ export async function runPersistedWorkflow(params: {
         typeof lastToolOutput.messageId === "string" ? lastToolOutput.messageId : null;
     }
 
-    if (toolName === "web_search" || toolName === "x_search") {
+    if (toolName === "query_supabase" || toolName === "query_database") {
+      const formatted = formatQueryToolReport({
+        toolOutput: lastToolOutput,
+        agent: params.agent.record,
+        task: params.task,
+      });
+      summary = formatted.text;
+      analysis = formatted.analysis;
+    } else if (
+      toolName === "web_search" ||
+      toolName === "x_search" ||
+      toolName === "google_sheets" ||
+      toolName === "read_document"
+    ) {
       summary = await summarizeToolResultsForTask({
         task: params.task,
         agentName: params.agent.record.name,
         toolName,
         toolOutput: lastToolOutput,
+        agentRecord: params.agent.record,
       });
     } else if (typeof lastToolOutput.messageId === "string" && summary) {
       summary = `${summary}\n\nDelivery message ID: ${lastToolOutput.messageId}`;
@@ -307,6 +330,7 @@ export async function runPersistedWorkflow(params: {
       toolCalls,
       turns,
       steps: params.activity.getSteps(),
+      analysis,
     };
   }
 
@@ -314,7 +338,7 @@ export async function runPersistedWorkflow(params: {
     runId: params.runId,
     status: "completed",
     summary,
-    metadata: { deliveredEmail, deliveredWhatsApp, workflow: true },
+    metadata: { deliveredEmail, deliveredWhatsApp, workflow: true, analysis },
   });
 
   return {
@@ -326,6 +350,7 @@ export async function runPersistedWorkflow(params: {
     toolCalls,
     turns,
     steps: params.activity.getSteps(),
+    analysis,
     delivery:
       deliveredEmail || deliveredWhatsApp
         ? {

@@ -1,6 +1,8 @@
 import { groqJsonCompletion } from "@/lib/groq/client";
 import { isGroqConfigured } from "@/lib/groq/env";
 import { parseJsonText } from "@/lib/groq/json";
+import { formatQueryToolReport } from "../analysis/structured-report";
+import type { BuilderAgentRecord } from "@/lib/agents/runtime-types";
 
 interface WebSearchResult {
   title?: string;
@@ -45,7 +47,28 @@ export async function summarizeToolResultsForTask(params: {
   agentName: string;
   toolName: string;
   toolOutput: Record<string, unknown>;
+  agentRecord?: Pick<
+    BuilderAgentRecord,
+    "name" | "goal" | "description" | "instructions" | "safetySettings"
+  >;
+  toolError?: string | null;
 }): Promise<string> {
+  if (params.toolName === "query_supabase" || params.toolName === "query_database") {
+    const agentRecord = params.agentRecord ?? {
+      name: params.agentName,
+      goal: params.task,
+      description: params.task,
+      instructions: null,
+      safetySettings: {},
+    };
+    return formatQueryToolReport({
+      toolOutput: params.toolOutput,
+      agent: agentRecord,
+      task: params.task,
+      toolError: params.toolError,
+    }).text;
+  }
+
   if (params.toolName === "web_search") {
     const tavilyAnswer =
       typeof params.toolOutput.answer === "string"

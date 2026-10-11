@@ -44,7 +44,7 @@ export const PROTECTION_PRESETS: Record<ProtectionMode, ProtectionPresetDefiniti
     tradeoff: "Good default for most startups — automation with guardrails on sensitive actions.",
     defaultToolPermission: (tool) => {
       if (tool.isHighRisk) return "ask_approval";
-      if (tool.id === "browser" || tool.id === "files" || tool.id === "google_sheets") {
+      if (tool.id === "browser" || tool.id === "files") {
         return "read_only";
       }
       return "draft_only";

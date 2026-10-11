@@ -353,6 +353,83 @@ describe("getAgentRequirements", () => {
     );
   });
 
+  it("requires a verified data source for query/ticket analysis agents", () => {
+    const result = getAgentRequirements(
+      snapshot({
+        name: "Evidence Agent",
+        goal: "Analyze support tickets and validate incident evidence.",
+        tools: ["query_supabase"],
+      })
+    );
+    const dataSource = result.requirements.find((item) => item.key === "data_source");
+    assert.equal(dataSource?.required, true);
+    assert.equal(dataSource?.status, "missing");
+  });
+
+  it("marks connected data source ready after a verified CSV", () => {
+    const result = getAgentRequirements(
+      snapshot({
+        name: "Evidence Agent",
+        goal: "Analyze support tickets and validate incident evidence.",
+        tools: ["query_supabase"],
+        setupAnswers: { ticket_source: "csv_upload", data_source: "verified" },
+        safetySettings: {
+          dataSource: {
+            kind: "csv_upload",
+            verifiedAt: new Date().toISOString(),
+            lastError: null,
+            isSample: false,
+            mapping: [{ sourceColumn: "ticket_id", targetField: "ticket_id" }],
+            headers: ["ticket_id"],
+            rowCount: 2,
+            csv: {
+              uploadId: "",
+              filename: "tickets.csv",
+              storagePath: "",
+              inlineText: "ticket_id\nTKT-1",
+            },
+          },
+        },
+      })
+    );
+    assert.equal(result.requirements.find((item) => item.key === "data_source")?.status, "ready");
+    assert.equal(result.requirements.find((item) => item.key === "ticket_source")?.status, "ready");
+  });
+
+  it("does not treat a saved Google Sheets source as ready", () => {
+    const result = getAgentRequirements(
+      snapshot({
+        name: "Evidence Agent",
+        goal: "Analyze support tickets and validate incident evidence.",
+        tools: ["query_supabase"],
+        setupAnswers: { ticket_source: "google_sheets" },
+        safetySettings: {
+          dataSource: {
+            kind: "google_sheets",
+            verifiedAt: new Date().toISOString(),
+            lastError: null,
+            isSample: false,
+            mapping: [],
+            headers: [],
+            rowCount: 3,
+            sheets: {
+              spreadsheetId: "legacy-sheet",
+              range: "Sheet1!A1:Z200",
+              access: "public",
+            },
+          },
+        },
+      })
+    );
+    assert.equal(result.requirements.find((item) => item.key === "ticket_source")?.status, "missing");
+    assert.equal(result.requirements.find((item) => item.key === "data_source")?.status, "missing");
+    assert.ok(
+      !(result.requirements.find((item) => item.key === "ticket_source")?.options ?? []).some(
+        (option) => option.id === "google_sheets"
+      )
+    );
+  });
+
   it("marks ticket source ready after a live builder answer", () => {
     const result = getAgentRequirements(
       snapshot({

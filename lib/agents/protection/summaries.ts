@@ -30,7 +30,7 @@ function describeToolAction(toolName: string, payload: Record<string, unknown>):
     case "query_supabase":
       return `look up rows in your ${readString(payload.table) ?? "workspace"} data`;
     case "google_sheets":
-      return "read data from a Google Sheet";
+      return "use a retired Google Sheets tool";
     case "x_search":
       return `search X for "${readString(payload.query) ?? "posts"}"`;
     default:

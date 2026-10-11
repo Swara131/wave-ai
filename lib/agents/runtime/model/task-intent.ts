@@ -81,6 +81,10 @@ export function isPromptEcho(message: string, task: string): boolean {
     }
   }
 
+  if (/use this saved configuration/i.test(normalizedMessage)) {
+    return true;
+  }
+
   if (normalizedMessage.toLowerCase() === normalizedTask.toLowerCase()) {
     return true;
   }

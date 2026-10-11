@@ -56,6 +56,10 @@ describe("task-intent", () => {
     assert.equal(isPromptEcho(`Completed: ${task}`, task), true);
     assert.equal(isPromptEcho(task, task), true);
     assert.equal(isPromptEcho("AI NEWS SUMMARY\n\n1. OpenAI releases...", task), false);
+    assert.equal(
+      isPromptEcho(`${task}\n\nUse this saved configuration:\n- ticket source: helpdesk`, task),
+      true
+    );
   });
 
   it("requires web research for news tasks when web_search is enabled", () => {

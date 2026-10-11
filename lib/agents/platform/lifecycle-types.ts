@@ -60,6 +60,7 @@ export const DEFAULT_PLATFORM_CHECKS: Omit<PlatformCheckResult, "checkedAt">[] =
   { id: "workflow", label: "Workflow", status: "not_run" },
   { id: "tools", label: "Tools", status: "not_run" },
   { id: "connections", label: "Connections", status: "not_run" },
+  { id: "database", label: "Database", status: "not_run" },
   { id: "execution", label: "Execution", status: "not_run" },
   { id: "output", label: "Output", status: "not_run" },
   { id: "safety", label: "Safety", status: "not_run" },

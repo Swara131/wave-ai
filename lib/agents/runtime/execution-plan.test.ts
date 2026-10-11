@@ -9,7 +9,7 @@ import { generateWorkflowFromPromptFallback } from "@/lib/agents/workflow/prompt
 import { interpretAgentRequest } from "@/lib/agents/interpret-agent-request";
 import { inferDeliveryModeFromText } from "@/lib/agents/delivery/infer-delivery";
 
-test("deriveExecutableTaskFromSetup includes saved configuration", () => {
+test("deriveExecutableTaskFromSetup does not dump saved configuration as the task", () => {
   const task = deriveExecutableTaskFromSetup({
     goal: "Find the latest AI news every morning and send a short summary by email.",
     setupAnswers: {
@@ -18,9 +18,10 @@ test("deriveExecutableTaskFromSetup includes saved configuration", () => {
     },
   });
 
-  assert.match(task, /user@example.com/);
-  assert.match(task, /Asia\/Kolkata/);
+  assert.doesNotMatch(task, /user@example.com/);
+  assert.doesNotMatch(task, /Use this saved configuration/i);
   assert.doesNotMatch(task, /create an agent that/i);
+  assert.match(task, /AI news/i);
 });
 
 test("destinationEmailFromAgent reads setup answers", () => {

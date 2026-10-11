@@ -110,7 +110,6 @@ function pickTestTool(capabilityIds: BuilderCapabilityId[]) {
     "email",
     "web_search",
     "http",
-    "google_sheets",
     "files",
     "whatsapp",
     "crm",

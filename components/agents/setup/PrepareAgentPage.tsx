@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Check, Loader2 } from "lucide-react";
 import PageShell from "@/components/ui/PageShell";
 import type { AgentRequirement, AgentRequirementsResult } from "@/lib/agents/requirements/types";
+import DataSourceSetupPanel from "@/components/agents/setup/DataSourceSetupPanel";
 
 function isInteractive(item: AgentRequirement | undefined): item is AgentRequirement {
   return item != null && item.inputType !== "none" && item.status !== "unavailable";
@@ -25,9 +26,9 @@ export default function PrepareAgentPage() {
   const [deliveryTest, setDeliveryTest] = useState<Record<string, string>>({});
   const [deliveryBusy, setDeliveryBusy] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!agentId) return;
-    setLoading(true);
+  const load = useCallback(async (options?: { silent?: boolean }) => {
+    if (!agentId) return null;
+    if (!options?.silent) setLoading(true);
     setError(null);
     try {
       const response = await fetch(
@@ -41,10 +42,12 @@ export default function PrepareAgentPage() {
         if (item.value) nextDrafts[item.key] = item.value;
       }
       setDrafts((current) => ({ ...nextDrafts, ...current }));
+      return payload;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load requirements.");
+      return null;
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
   }, [agentId]);
 
@@ -86,7 +89,13 @@ export default function PrepareAgentPage() {
         ...section,
         items: section.keys
           .map((key) => byKey.get(key))
-          .filter((item): item is AgentRequirement => Boolean(item) && isInteractive(item)),
+          .filter(
+            (item): item is AgentRequirement =>
+              Boolean(item) &&
+              isInteractive(item) &&
+              item.key !== "ticket_source" &&
+              item.key !== "data_source"
+          ),
       }))
       .filter((section) => section.items.length > 0);
   }, [result, byKey]);
@@ -158,6 +167,10 @@ export default function PrepareAgentPage() {
         <p className="prep-error" role="alert">
           {error}
         </p>
+      ) : null}
+
+      {byKey.has("ticket_source") || byKey.has("data_source") || byKey.has("database") ? (
+        <DataSourceSetupPanel agentId={agentId} onStatusChange={() => void load({ silent: true })} />
       ) : null}
 
       {visibleSections.map((section) => (
@@ -290,7 +303,16 @@ export default function PrepareAgentPage() {
           <button
             type="button"
             className="prep-btn prep-btn-secondary"
-            onClick={() => setReviewOpen(true)}
+            onClick={() =>
+              void (async () => {
+                const next = await load({ silent: true });
+                if (next?.ready) {
+                  router.push(`/agents/${encodeURIComponent(agentId)}/test`);
+                  return;
+                }
+                setReviewOpen(true);
+              })()
+            }
           >
             Review & Continue
           </button>
@@ -300,6 +322,12 @@ export default function PrepareAgentPage() {
                 <li key={item.key}>
                   <span className="prep-dot" />
                   {item.label}
+                  {item.key === "data_source" ? (
+                    <small className="prep-fail-reason">
+                      Upload a CSV (or another source), map columns, then Save and verify. This
+                      is not a setting you select here.
+                    </small>
+                  ) : null}
                 </li>
               ))}
             </ul>

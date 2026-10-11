@@ -7,6 +7,7 @@ import {
   fieldIsVisible,
   inferJobProfile,
 } from "./business-inputs";
+import { isDataSourceVerified } from "@/lib/agents/data-source/config";
 import {
   asSetupAnswers,
   type AgentReadiness,
@@ -449,22 +450,54 @@ export function getAgentRequirements(snapshot: AgentRequirementSnapshot): AgentR
     }
 
     if (/\btickets?\b/i.test(textBlob(snapshot))) {
-      const ticketAnswer = ans(answers, "ticket_source");
+      const ticketAnswerRaw =
+        ans(answers, "ticket_source") || snapshot.safetySettings?.dataSource?.kind || "";
+      const ticketAnswer = ticketAnswerRaw === "google_sheets" ? "" : ticketAnswerRaw;
       push({
         key: "ticket_source",
         category: "input",
         label: "Ticket information",
-        description: "Where Wave should learn that a ticket changed.",
+        description: "Where Wave should read ticket records. Webhook/helpdesk are not claimed connected until those integrations exist.",
         required: true,
         status: ready(Boolean(ticketAnswer)),
         reason: "This agent reacts to support tickets, so it needs a ticket or event source.",
         configurationType: "choice",
         value: ticketAnswer || null,
         options: [
-          { id: "webhook", label: "Webhook / event" },
-          { id: "helpdesk", label: "Help desk" },
-          { id: "manual", label: "Enter a ticket when testing" },
+          { id: "csv_upload", label: "CSV upload" },
+          { id: "wave_database", label: "Wave ticket table" },
+          { id: "manual_sample", label: "Sample / test rows (not live data)" },
+          { id: "manual", label: "Sample / test rows (not live data)" },
         ],
+        section: "input",
+        sectionTitle: "Data source",
+        sectionDescription: "Connect real records or labeled sample data. Wave will not invent tickets.",
+      });
+    }
+
+    if (
+      tools.includes("query_supabase") ||
+      tools.includes("query_database") ||
+      /\btickets?\b/i.test(textBlob(snapshot))
+    ) {
+      const needsRecords = tools.includes("query_supabase") || tools.includes("query_database");
+      const verified =
+        isDataSourceVerified(snapshot.safetySettings?.dataSource ?? null) ||
+        ans(answers, "data_source") === "verified";
+      push({
+        key: "data_source",
+        category: "input",
+        label: "Connected data source",
+        description: "Verify CSV, sample rows, or the Wave ticket table before running.",
+        required: needsRecords,
+        status: needsRecords ? ready(verified) : verified ? "ready" : "optional",
+        reason: "This agent needs records from a source you control. It will not insert fake tickets.",
+        configurationType: "connection",
+        value: snapshot.safetySettings?.dataSource?.kind ?? null,
+        actionHref: snapshot.agentId ? `/agents/${encodeURIComponent(snapshot.agentId)}/prepare` : undefined,
+        action: "Configure data source",
+        section: "input",
+        sectionTitle: "Data source",
       });
     }
 

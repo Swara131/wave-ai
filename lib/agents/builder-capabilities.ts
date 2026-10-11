@@ -21,12 +21,6 @@ export const BUILDER_CAPABILITY_OPTIONS = [
     tools: ["send_email"],
   },
   {
-    id: "google_sheets",
-    label: "Google Sheets",
-    description: "Read data from Google Sheets",
-    tools: ["google_sheets"],
-  },
-  {
     id: "x",
     label: "X",
     description: "Search recent posts on X",
@@ -146,9 +140,6 @@ export function inferCapabilityIdsFromText(text: string): BuilderCapabilityId[] 
   }
   if (/\b(email|e-mail|mail|inbox)\b/.test(normalized)) {
     ids.add("email");
-  }
-  if (/\b(google sheet|spreadsheet|sheets)\b/.test(normalized)) {
-    ids.add("google_sheets");
   }
   if (/\b(document|file|upload|pdf|csv)\b/.test(normalized)) {
     ids.add("files");

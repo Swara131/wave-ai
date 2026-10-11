@@ -18,6 +18,13 @@ import { getAgentPolicyByAgentId } from "@/lib/agents/repository";
 import { isWebSearchConfigured } from "@/lib/agents/tools/handlers/web-search";
 import { getToolDefinition } from "@/lib/agents/tools/catalog";
 import { toolConnectionsReady } from "@/lib/agents/tools/connections";
+import { normalizeEnabledTools } from "@/lib/agents/tools/registry";
+import { queryWorkspaceRecords } from "@/lib/agents/tools/handlers/query-supabase";
+import {
+  hasQueryDatabaseTool,
+  resolveDatabaseQueryInput,
+} from "@/lib/agents/runtime/data/resolve-query-source";
+import type { LoadedAgent } from "@/lib/agents/runtime/types";
 import { readWorkflowState } from "@/lib/agents/workflow/persistence";
 import { activeWorkflowGraph } from "@/lib/agents/workflow/persistence";
 import { validateWorkflowGraph } from "@/lib/agents/workflow/validate-workflow";
@@ -135,6 +142,87 @@ function checkConnections(agent: BuilderAgentRecord): PlatformCheckResult {
     fixLabel: failures.length ? "Configure integration" : undefined,
     checkedAt: new Date().toISOString(),
   };
+}
+
+async function checkDatabase(
+  supabase: SupabaseClient,
+  agent: BuilderAgentRecord
+): Promise<PlatformCheckResult | null> {
+  const enabledTools = normalizeEnabledTools(agent.tools);
+  if (!hasQueryDatabaseTool(enabledTools) && !hasQueryDatabaseTool(agent.tools)) {
+    return null;
+  }
+
+  const loaded: LoadedAgent = {
+    record: agent,
+    gatewayAgentId: agent.slug,
+    systemPrompt: "",
+    enabledTools,
+  };
+
+  try {
+    const outcome = await queryWorkspaceRecords(
+      supabase,
+      resolveDatabaseQueryInput({
+        agent: loaded,
+        task: agent.goal ?? agent.description,
+        limit: 5,
+      }),
+      {
+        agent: loaded,
+        runId: null,
+        userId: agent.userId,
+        organizationId: agent.organizationId,
+      }
+    );
+
+    const table =
+      typeof outcome.output.table === "string" ? outcome.output.table : "configured source";
+    const rowCount =
+      typeof outcome.output.rowCount === "number" ? outcome.output.rowCount : 0;
+    const tableAvailable = outcome.output.tableAvailable !== false;
+
+    if (!outcome.executed || !tableAvailable) {
+      const queryError = outcome.executed ? null : outcome.error;
+      return {
+        id: "database",
+        label: "Database",
+        status: "fail",
+        message:
+          queryError ??
+          `Database table ${table} is missing or the query failed. Empty results are reported separately after the table is reachable.`,
+        fixHref: `/agents/${encodeURIComponent(agent.slug)}/edit`,
+        fixLabel: "Fix data source",
+        checkedAt: new Date().toISOString(),
+      };
+    }
+
+    if (rowCount === 0) {
+      return {
+        id: "database",
+        label: "Database",
+        status: "needs_attention",
+        message: `Reached ${table}, but it is empty (0 records).`,
+        checkedAt: new Date().toISOString(),
+      };
+    }
+
+    return {
+      id: "database",
+      label: "Database",
+      status: "pass",
+      message: `Reached ${table} and found ${rowCount} accessible record(s).`,
+      checkedAt: new Date().toISOString(),
+    };
+  } catch (err) {
+    return {
+      id: "database",
+      label: "Database",
+      status: "fail",
+      message: err instanceof Error ? err.message : "Database access check failed.",
+      checkedAt: new Date().toISOString(),
+    };
+  }
 }
 
 async function checkSafety(
@@ -261,11 +349,13 @@ export async function verifyAgentPlatform(
     outputCheck?: PlatformCheckResult;
   }
 ): Promise<AgentPlatformLifecycle> {
+  const databaseCheck = await checkDatabase(supabase, agent);
   const checks: PlatformCheckResult[] = [
     checkConfiguration(agent),
     checkWorkflow(agent),
     checkTools(agent),
     checkConnections(agent),
+    ...(databaseCheck ? [databaseCheck] : []),
     options?.executionCheck ?? {
       id: "execution",
       label: "Execution",
@@ -327,6 +417,9 @@ export function isAgentReadyToDeploy(lifecycle: AgentPlatformLifecycle): boolean
     "execution",
     "output",
   ];
+  if (lifecycle.checks.some((item) => item.id === "database")) {
+    required.push("database");
+  }
   return required.every((id) => {
     const check = lifecycle.checks.find((item) => item.id === id);
     return check?.status === "pass";

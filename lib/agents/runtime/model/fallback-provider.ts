@@ -3,6 +3,7 @@ import {
   destinationEmailFromAgent,
   destinationPhoneFromAgent,
 } from "../execution-plan";
+import { resolveDatabaseQueryInput, taskNeedsRecordLookup } from "../data/resolve-query-source";
 import type { ModelCompletionRequest, ModelTurn } from "../types";
 import { summarizeToolResultsForTask } from "./summarize-results";
 import {
@@ -103,6 +104,8 @@ export async function fallbackModelTurn(
       agentName: request.agent.record.name,
       toolName,
       toolOutput: lastResult.output,
+      agentRecord: request.agent.record,
+      toolError: lastResult.error,
     });
 
     return {
@@ -123,6 +126,22 @@ export async function fallbackModelTurn(
       actionType: "research.web_search",
       toolInput: { query, count: 5 },
       reasoning: "Research task requires live web results before summarizing.",
+    };
+  }
+
+  if (
+    request.enabledToolNames.includes("query_supabase") &&
+    taskNeedsRecordLookup(request.task, request.agent)
+  ) {
+    return {
+      type: "tool_call",
+      toolName: "query_supabase",
+      actionType: "data.query",
+      toolInput: resolveDatabaseQueryInput({
+        agent: request.agent,
+        task: request.task,
+      }),
+      reasoning: "This task needs records from the configured database before a result can be produced.",
     };
   }
 
@@ -195,9 +214,12 @@ export async function fallbackModelTurn(
     return {
       type: "tool_call",
       toolName: "query_supabase",
-      actionType: "integration.query",
-      toolInput: { table: "agents", limit: 5 },
-      reasoning: "Reading workspace data before completing the task.",
+      actionType: "data.query",
+      toolInput: resolveDatabaseQueryInput({
+        agent: request.agent,
+        task: request.task,
+      }),
+      reasoning: "Reading configured workspace records before completing the task.",
     };
   }
 
@@ -208,16 +230,6 @@ export async function fallbackModelTurn(
       actionType: "integration.read_document",
       toolInput: { documentId: "latest" },
       reasoning: "Reading uploaded documents referenced by the task.",
-    };
-  }
-
-  if (request.enabledToolNames.includes("google_sheets")) {
-    return {
-      type: "tool_call",
-      toolName: "google_sheets",
-      actionType: "integration.google_sheets",
-      toolInput: { range: "Sheet1!A1:D10" },
-      reasoning: "Reading sheet data for the task.",
     };
   }
 

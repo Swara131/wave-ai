@@ -96,18 +96,10 @@ export const ZELTA_TOOL_CATALOG: ZeltaToolDefinition[] = [
   {
     name: "google_sheets",
     label: "Google Sheets",
-    description: "Read values from a Google Sheet (public sheets via API key).",
+    description: "No longer available. Use a CSV upload or sample rows as the agent data source.",
     actionType: "integration.google_sheets",
     riskLevel: "low",
-    permissions: [
-      {
-        provider: "google_sheets",
-        label: "Google Sheets",
-        description: "Set GOOGLE_SHEETS_API_KEY for read-only public sheet access.",
-        envVars: ["GOOGLE_SHEETS_API_KEY"],
-        settingsPath: "/settings?tab=integrations&provider=google_sheets",
-      },
-    ],
+    permissions: [],
     inputSchema: {
       type: "object",
       properties: {
@@ -148,14 +140,17 @@ export const ZELTA_TOOL_CATALOG: ZeltaToolDefinition[] = [
   {
     name: "query_supabase",
     label: "Database query",
-    description: "Read rows from your Wave data (agents, uploads, proposals).",
+    description: "Read rows from your Wave data (tickets/CRM, uploads, proposals, or agents).",
     actionType: "data.query",
     riskLevel: "low",
     permissions: [{ provider: "none", label: "Built-in", description: "Uses your Wave workspace data." }],
     inputSchema: {
       type: "object",
       properties: {
-        table: { type: "string", description: "agents | uploaded_logs | action_proposals" },
+        table: {
+          type: "string",
+          description: "agent_crm_updates | uploaded_logs | action_proposals | agents",
+        },
         limit: { type: "number", description: "Max rows (1-25)" },
         slug: { type: "string", description: "Filter agents by slug" },
         status: { type: "string", description: "Filter uploaded_logs by status" },

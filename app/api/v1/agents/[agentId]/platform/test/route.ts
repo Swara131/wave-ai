@@ -54,10 +54,13 @@ export async function POST(request: Request, context: RouteContext) {
       },
     });
 
-    const executionOk =
-      result.runStatus === "completed" || result.runStatus === "awaiting_approval";
+    const outcome = result.outcome;
     return secureJson({
-      success: executionOk && !result.runError,
+      success: Boolean(outcome?.success),
+      outcome: outcome?.kind ?? "failed",
+      queryStatus: outcome?.queryStatus ?? "not_run",
+      recordsProcessed: outcome?.recordsProcessed ?? 0,
+      analysis: result.analysis ?? null,
       lifecycle: result.lifecycle,
       runId: result.runId,
       runStatus: result.runStatus,

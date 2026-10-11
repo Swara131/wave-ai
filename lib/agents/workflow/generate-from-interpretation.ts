@@ -75,7 +75,7 @@ function inferToolStepDescription(toolName: string, goal: string): string {
     case "read_document":
       return "Read uploaded documents";
     case "google_sheets":
-      return "Read or update spreadsheet data";
+      return "Google Sheets is no longer supported — use CSV upload instead";
     case "http_request":
       return "Call an external API";
     case "issue_refund":

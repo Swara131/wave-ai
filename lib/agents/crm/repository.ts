@@ -1,6 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { SupportTicketInput } from "./types";
+import {
+  CRM_TABLE_MISSING_MESSAGE,
+  isMissingCrmTableError,
+  logDatabaseQueryDiagnostic,
+  sanitizeDatabaseError,
+} from "./db-errors";
+
+export { isMissingCrmTableError, CRM_TABLE_MISSING_MESSAGE } from "./db-errors";
 
 export interface CrmUpdateRow {
   id: string;
@@ -31,11 +39,6 @@ function mapRow(row: Record<string, unknown>): CrmUpdateRow {
   };
 }
 
-export function isMissingCrmTableError(message: string): boolean {
-  return /schema cache|could not find the table|does not exist|agent_crm_updates/i.test(
-    message
-  );
-}
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === "object" && !Array.isArray(value)) {
@@ -155,6 +158,60 @@ export async function insertCrmUpdate(
   }
 
   throw new Error(message);
+}
+
+export async function listCrmRecords(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string;
+    userId: string;
+    agentId: string;
+    limit: number;
+  }
+): Promise<{
+  rows: Record<string, unknown>[];
+  source: "agent_crm_updates" | "agent_safety_settings";
+  tableAvailable: boolean;
+  error: string | null;
+}> {
+  const { data, error } = await supabase
+    .from("agent_crm_updates")
+    .select("*")
+    .eq("organization_id", params.organizationId)
+    .eq("user_id", params.userId)
+    .limit(params.limit);
+
+  if (!error) {
+    return {
+      rows: (data ?? []) as Record<string, unknown>[],
+      source: "agent_crm_updates",
+      tableAvailable: true,
+      error: null,
+    };
+  }
+
+  const message = sanitizeDatabaseError(error.message);
+  logDatabaseQueryDiagnostic({
+    table: "agent_crm_updates",
+    code: error.code,
+    message: error.message,
+  });
+
+  if (isMissingCrmTableError(error.message)) {
+    return {
+      rows: [],
+      source: "agent_crm_updates",
+      tableAvailable: false,
+      error: CRM_TABLE_MISSING_MESSAGE,
+    };
+  }
+
+  return {
+    rows: [],
+    source: "agent_crm_updates",
+    tableAvailable: true,
+    error: message,
+  };
 }
 
 export async function countCrmCustomers(

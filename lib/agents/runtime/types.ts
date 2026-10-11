@@ -1,5 +1,6 @@
 import type { RunDeliveryRecord } from "../delivery/types";
 import type { BuilderAgentRecord } from "../runtime-types";
+import type { RecordAnalysisResult } from "./analysis/record-validation";
 
 /** Loaded agent ready for execution. */
 export interface LoadedAgent {
@@ -119,6 +120,7 @@ export interface RunAgentResult {
   toolCalls: number;
   turns: number;
   steps: RuntimeStepSummary[];
+  analysis?: RecordAnalysisResult;
   delivery?: RunDeliveryRecord;
   protection?: {
     summary?: string;
