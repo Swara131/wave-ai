@@ -40,6 +40,7 @@ export default function BuilderClarifyPanel({
                     key={choice.id}
                     type="button"
                     className="wfb-clarify-choice"
+                    aria-pressed={item.value === choice.id}
                     onClick={() => onAnswer(item, choice.id)}
                   >
                     {choice.label}

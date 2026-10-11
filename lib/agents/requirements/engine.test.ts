@@ -347,6 +347,25 @@ describe("getAgentRequirements", () => {
     assert.ok(!k.includes("meeting_date"));
     assert.ok(!k.includes("company_linkedin"));
     assert.equal(result.jobProfile, "crm_update");
+    assert.equal(
+      result.requirements.find((item) => item.key === "ticket_source")?.status,
+      "missing"
+    );
+  });
+
+  it("marks ticket source ready after a live builder answer", () => {
+    const result = getAgentRequirements(
+      snapshot({
+        name: "CRM Agent",
+        goal: "Update customer records when support tickets are resolved.",
+        tools: ["update_crm_record"],
+        setupAnswers: { ticket_source: "manual" },
+      })
+    );
+    assert.equal(
+      result.requirements.find((item) => item.key === "ticket_source")?.status,
+      "ready"
+    );
   });
 
   it("WhatsApp ticket agent asks for trigger and recipient, not sales briefing fields", () => {

@@ -86,10 +86,15 @@ export function snapshotFromLiveDraft(params: {
   interpretation: AgentInterpretation;
   workflow: AgentWorkflowGraph | null;
   requirementChoices?: RequirementChoices | null;
+  setupAnswers?: Record<string, string> | null;
   destinationEmail?: string | null;
   destinationPhone?: string | null;
   stage?: RequirementStage;
 }): AgentRequirementSnapshot {
+  const setupAnswers = {
+    ...asSetupAnswers(params.requirementChoices),
+    ...asSetupAnswers(params.setupAnswers),
+  };
   return {
     agentId: params.agentId ?? "draft",
     name: params.interpretation.displayName,
@@ -106,9 +111,7 @@ export function snapshotFromLiveDraft(params: {
     destinationPhone: params.destinationPhone ?? null,
     workflow: params.workflow,
     requirementChoices: params.requirementChoices ?? null,
-    setupAnswers: params.requirementChoices
-      ? asSetupAnswers(params.requirementChoices)
-      : null,
+    setupAnswers: Object.keys(setupAnswers).length > 0 ? setupAnswers : null,
     webSearchConnected: true,
     emailConnected: true,
     whatsappConnected: true,

@@ -25,11 +25,27 @@ import AgentLiveRunPanel, {
 } from "@/components/agents/runtime/AgentLiveRunPanel";
 import { getAgentRequirements } from "@/lib/agents/requirements/engine";
 import { snapshotFromLiveDraft } from "@/lib/agents/requirements/from-agent";
-import type { AgentRequirement, RequirementChoices } from "@/lib/agents/requirements/types";
+import {
+  asSetupAnswers,
+  type AgentRequirement,
+  type RequirementChoices,
+} from "@/lib/agents/requirements/types";
 import { matchWorkflowNodeToStep } from "@/lib/agents/workflow/run-status";
 import type { RunAgentResult } from "@/lib/agents/runtime/types";
 
 const MIN_PROMPT_LENGTH = 15;
+const CLARIFY_ASK_TYPES = new Set(["choice", "email", "phone", "schedule"]);
+
+function hasBlockingClarifyQuestions(requirements: AgentRequirement[] | undefined): boolean {
+  return Boolean(
+    requirements?.some(
+      (item) =>
+        item.required &&
+        item.status === "missing" &&
+        CLARIFY_ASK_TYPES.has(item.configurationType)
+    )
+  );
+}
 
 export default function VisualAgentBuilder() {
   const router = useRouter();
@@ -139,11 +155,19 @@ export default function VisualAgentBuilder() {
       const saved = await persistWorkflow(graph, savePayload.slug);
       if (!saved) throw new Error("Could not save workflow.");
 
-      if (savePayload.slug && (destinationEmail || destinationPhone || requirementChoices.output)) {
+      const answers = asSetupAnswers(requirementChoices);
+      if (
+        savePayload.slug &&
+        (destinationEmail ||
+          destinationPhone ||
+          requirementChoices.output ||
+          Object.keys(answers).length > 0)
+      ) {
         await fetch(`/api/v1/agents/${encodeURIComponent(savePayload.slug)}/requirements`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            answers,
             outputChoice: requirementChoices.output,
             destinationEmail,
             destinationPhone,
@@ -152,8 +176,9 @@ export default function VisualAgentBuilder() {
       }
 
       setPendingCreate(false);
+      return savePayload.slug;
     },
-    [agentDbId, destinationEmail, destinationPhone, persistWorkflow, requirementChoices.output]
+    [agentDbId, destinationEmail, destinationPhone, persistWorkflow, requirementChoices]
   );
 
   const queueSave = useCallback(
@@ -309,15 +334,7 @@ export default function VisualAgentBuilder() {
           destinationPhone,
         })
       );
-      const needsAnswers = preview.requirements.some(
-        (item) =>
-          item.required &&
-          item.status === "missing" &&
-          (item.configurationType === "choice" ||
-            item.configurationType === "email" ||
-            item.configurationType === "phone" ||
-            item.configurationType === "schedule")
-      );
+      const needsAnswers = hasBlockingClarifyQuestions(preview.requirements);
       if (needsAnswers) {
         setPendingCreate(true);
         return;
@@ -355,11 +372,20 @@ export default function VisualAgentBuilder() {
       : null;
 
   const handleClarifyAnswer = (requirement: AgentRequirement, value: string) => {
-    if (requirement.key === "output_destination") {
-      setRequirementChoices((current) => ({
+    setRequirementChoices((current) => {
+      const next: RequirementChoices = {
         ...current,
-        output: value as RequirementChoices["output"],
-      }));
+        [requirement.key]: value,
+      };
+      if (requirement.key === "output_destination") {
+        next.output = value as RequirementChoices["output"];
+      }
+      if (requirement.key === "customer_source") {
+        next.customerSource = value as RequirementChoices["customerSource"];
+      }
+      return next;
+    });
+    if (requirement.key === "output_destination") {
       setInterpretation((current) =>
         current
           ? {
@@ -369,12 +395,6 @@ export default function VisualAgentBuilder() {
             }
           : current
       );
-    }
-    if (requirement.key === "customer_source") {
-      setRequirementChoices((current) => ({
-        ...current,
-        customerSource: value as RequirementChoices["customerSource"],
-      }));
     }
     if (requirement.configurationType === "email") setDestinationEmail(value);
     if (requirement.configurationType === "phone") setDestinationPhone(value);
@@ -415,13 +435,27 @@ export default function VisualAgentBuilder() {
     }
   };
 
+  const ensureSavedSlug = async (): Promise<string | null> => {
+    if (agentSlug) return agentSlug;
+    if (!interpretation || !workflowGraph) {
+      setError("Generate the workflow first.");
+      return null;
+    }
+    if (hasBlockingClarifyQuestions(liveRequirements?.requirements)) {
+      setError("Answer the questions on the left so Wave can create this agent, then try again.");
+      return null;
+    }
+    return commitAgent(interpretation, workflowGraph);
+  };
+
   const handleVerify = async () => {
-    if (!agentSlug) return;
     setVerifying(true);
     setError(null);
     try {
+      const slug = await ensureSavedSlug();
+      if (!slug) return;
       const response = await fetch(
-        `/api/v1/agents/${encodeURIComponent(agentSlug)}/workflow/verify`,
+        `/api/v1/agents/${encodeURIComponent(slug)}/workflow/verify`,
         { method: "POST" }
       );
       const payload = await readJsonResponse<{
@@ -442,12 +476,13 @@ export default function VisualAgentBuilder() {
   };
 
   const handlePublish = async () => {
-    if (!agentSlug) return;
     setPublishing(true);
     setError(null);
     try {
+      const slug = await ensureSavedSlug();
+      if (!slug) return;
       const response = await fetch(
-        `/api/v1/agents/${encodeURIComponent(agentSlug)}/workflow/publish`,
+        `/api/v1/agents/${encodeURIComponent(slug)}/workflow/publish`,
         { method: "POST" }
       );
       const payload = await readJsonResponse<{ slug?: string; error?: string }>(response);
@@ -463,12 +498,13 @@ export default function VisualAgentBuilder() {
   };
 
   const handleSafetyReview = async () => {
-    if (!agentSlug) return;
     setSafetyReviewing(true);
     setError(null);
     try {
+      const slug = await ensureSavedSlug();
+      if (!slug) return;
       const response = await fetch(
-        `/api/v1/agents/${encodeURIComponent(agentSlug)}/workflow/review`,
+        `/api/v1/agents/${encodeURIComponent(slug)}/workflow/review`,
         { method: "POST" }
       );
       const payload = await readJsonResponse<{ state?: AgentWorkflowState; error?: string }>(
@@ -645,7 +681,11 @@ export default function VisualAgentBuilder() {
             safetyReviewedAt={workflowState?.safetyReviewedAt ?? null}
             onVerify={() => void handleVerify()}
             onSaveDraft={() => {
-              if (workflowGraph && agentSlug) void persistWorkflow(workflowGraph, agentSlug);
+              void (async () => {
+                if (!workflowGraph) return;
+                const slug = await ensureSavedSlug();
+                if (slug) await persistWorkflow(workflowGraph, slug);
+              })();
             }}
             onDiscard={() => void handleDiscardDraft()}
             onPublish={() => void handlePublish()}

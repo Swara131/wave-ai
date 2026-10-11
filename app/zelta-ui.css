@@ -2279,6 +2279,12 @@
   background: #dbeafe;
 }
 
+.wfb-clarify-choice[aria-pressed="true"] {
+  background: #dbeafe;
+  border-color: #2563eb;
+  color: #1e3a8a;
+}
+
 .wfb-config-header {
   display: flex;
   align-items: center;
