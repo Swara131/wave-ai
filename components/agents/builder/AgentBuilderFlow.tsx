@@ -673,7 +673,7 @@ export default function AgentBuilderFlow() {
                     [
                       ["email", "Email me"],
                       ["notification", "Wave notification"],
-                      ["both", "Both"],
+                      ["both", "Email and WhatsApp"],
                     ] as const
                   ).map(([mode, label]) => (
                     <li key={mode}>

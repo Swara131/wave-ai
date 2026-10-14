@@ -45,6 +45,47 @@ export function mergeDeliverySettings(
   };
 }
 
+/**
+ * Apply a setup answer to delivery settings without hijacking an explicit
+ * Wave (in-app) choice into email or WhatsApp.
+ */
+export function applyPendingDeliveryAnswer(
+  delivery: AgentDeliverySettings,
+  pendingKey: string,
+  value: string
+): AgentDeliverySettings {
+  const trimmed = value.trim();
+  const next: AgentDeliverySettings = {
+    mode: delivery.mode,
+    destinationEmail: delivery.destinationEmail ?? null,
+    destinationPhone: delivery.destinationPhone ?? null,
+  };
+
+  if (pendingKey === "email") {
+    next.destinationEmail = trimmed;
+  }
+  if (pendingKey === "whatsapp") {
+    next.destinationPhone = trimmed;
+  }
+
+  const outputKey = pendingKey === "output_destination" || pendingKey === "output";
+  if (outputKey) {
+    const output = trimmed.toLowerCase();
+    if (output === "email") next.mode = "email";
+    else if (output === "whatsapp") next.mode = "whatsapp";
+    else if (
+      output === "notification" ||
+      output === "slack" ||
+      output === "wave" ||
+      output === "in_app"
+    ) {
+      next.mode = "notification";
+    }
+  }
+
+  return next;
+}
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function resolveDestinationEmail(params: {
@@ -96,6 +137,24 @@ export function shouldDeliverEmail(mode: AgentDeliveryMode): boolean {
 
 export function shouldDeliverInAppNotification(mode: AgentDeliveryMode): boolean {
   return mode === "notification";
+}
+
+/** True when post-run delivery should create a Wave / email / WhatsApp result. */
+export function needsPostRunDelivery(params: {
+  mode: AgentDeliveryMode;
+  emailedAlready: boolean;
+  whatsappAlready: boolean;
+}): boolean {
+  return (
+    shouldDeliverInAppNotification(params.mode) ||
+    (shouldDeliverEmail(params.mode) && !params.emailedAlready) ||
+    (shouldDeliverWhatsApp(params.mode) && !params.whatsappAlready)
+  );
+}
+
+/** External send_email / WhatsApp tools must not fire when the user chose Wave only. */
+export function shouldBlockExternalDeliveryTools(mode: AgentDeliveryMode): boolean {
+  return mode === "notification" || mode === "none";
 }
 
 export function isEmailDeliveryConnected(): boolean {

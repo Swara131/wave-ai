@@ -11,6 +11,7 @@ import {
   isTwilioWhatsAppConfigured,
   isUsingWhatsAppSandbox,
 } from "../lib/whatsapp/env";
+import { readTavilyApiKey } from "../lib/agents/tools/handlers/web-search";
 
 function loadEnvFile(filename: string): void {
   const path = resolve(process.cwd(), filename);
@@ -106,17 +107,19 @@ async function checkTwilio(): Promise<string> {
 }
 
 async function checkTavily(): Promise<string> {
-  const key = process.env.TAVILY_API_KEY?.trim();
+  const key = readTavilyApiKey();
   if (!key) return "SKIP — TAVILY_API_KEY not set";
 
   const response = await fetch("https://api.tavily.com/search", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ api_key: key, query: "ping", max_results: 1, search_depth: "basic" }),
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query: "ping", max_results: 1, search_depth: "basic" }),
   });
   if (!response.ok) {
-    const payload = (await response.json().catch(() => ({}))) as { detail?: { error?: string } };
-    return `FAIL — Tavily rejected the key (${response.status}: ${payload.detail?.error ?? "unauthorized"})`;
+    return `FAIL — Tavily rejected the key (${response.status})`;
   }
   return "OK — key accepted";
 }

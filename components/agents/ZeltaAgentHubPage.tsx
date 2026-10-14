@@ -800,7 +800,7 @@ export default function ZeltaAgentHubPage() {
               >
                 <option value="email">Email me</option>
                 <option value="notification">Wave notification</option>
-                <option value="both">Both</option>
+                <option value="both">Email and WhatsApp</option>
                 <option value="none">None (dashboard only)</option>
               </select>
             </label>

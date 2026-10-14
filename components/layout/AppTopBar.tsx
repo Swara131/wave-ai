@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 import AccountMenu from "@/components/layout/AccountMenu";
+import WaveNotificationBell from "@/components/notifications/WaveNotificationBell";
 import { getPageTitle } from "@/lib/navigation/page-titles";
 
 interface AppTopBarProps {
@@ -29,6 +30,7 @@ export default function AppTopBar({ onOpenMobileNav, minimal = false }: AppTopBa
         </button>
         <div className="ztop-minimal-spacer" aria-hidden="true" />
         <div className="ztop-actions">
+          <WaveNotificationBell />
           <Link href="/billing" className="ds-btn ds-btn-secondary ztop-upgrade">
             Upgrade
           </Link>
@@ -58,6 +60,7 @@ export default function AppTopBar({ onOpenMobileNav, minimal = false }: AppTopBa
         </div>
       </div>
       <div className="ztop-actions">
+        <WaveNotificationBell />
         <Link href="/billing" className="ds-btn ds-btn-secondary ztop-upgrade">
           Upgrade
         </Link>

@@ -59,6 +59,7 @@ export default function NotificationsPage() {
     () => ({
       unread: notifications.filter((n) => n.status === "unread").length,
       all: notifications.length,
+      in_app: notifications.filter((n) => n.channel === "in_app").length,
       email: notifications.filter((n) => n.channel === "email").length,
       whatsapp: notifications.filter((n) => n.channel === "whatsapp").length,
       slack: notifications.filter((n) => n.channel === "slack").length,
@@ -71,6 +72,8 @@ export default function NotificationsPage() {
     switch (activeTab) {
       case "unread":
         return notifications.filter((n) => n.status === "unread");
+      case "in_app":
+        return notifications.filter((n) => n.channel === "in_app");
       case "email":
         return notifications.filter((n) => n.channel === "email");
       case "whatsapp":

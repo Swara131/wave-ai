@@ -7,6 +7,10 @@ import type { RecordAnalysisResult } from "./analysis/record-validation";
 import { deriveWebSearchQuery } from "./model/task-intent";
 import { resolveDatabaseQueryInput } from "./data/resolve-query-source";
 import {
+  parseDeliverySettings,
+  shouldBlockExternalDeliveryTools,
+} from "@/lib/agents/delivery/settings";
+import {
   destinationEmailFromAgent,
   destinationPhoneFromAgent,
   setupAnswersFromAgent,
@@ -177,6 +181,19 @@ export async function runPersistedWorkflow(params: {
     const toolName = resolveToolName(
       node.config.toolName ?? (node.type === "output_email" ? "send_email" : "")
     );
+    const delivery = parseDeliverySettings(params.agent.record.safetySettings);
+    if (
+      (toolName === "send_email" || toolName === "send_whatsapp_message") &&
+      shouldBlockExternalDeliveryTools(delivery.mode)
+    ) {
+      await params.activity.logRunStep({
+        runId: params.runId,
+        key: `workflow.${node.id}.skipped`,
+        label: `${node.name} skipped`,
+        detail: "Results stay in Wave. Email and WhatsApp are not sent for this agent.",
+      });
+      continue;
+    }
     if (!toolName || !params.agent.enabledTools.includes(toolName)) {
       const error = toolName
         ? `${node.name} could not run because ${toolName} is not enabled for this agent.`

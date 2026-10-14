@@ -5,6 +5,7 @@ import { RequirementsNotReadyError } from "@/lib/agents/requirements/errors";
 import { updateBuilderAgent } from "@/lib/agents/repository";
 import type { BuilderAgentRecord } from "@/lib/agents/runtime-types";
 import type { AgentRequirement } from "@/lib/agents/requirements/types";
+import { applyPendingDeliveryAnswer } from "@/lib/agents/delivery/settings";
 
 export async function applyChatAnswerIfPending(
   supabase: SupabaseClient,
@@ -19,19 +20,15 @@ export async function applyChatAnswerIfPending(
     ...(agent.safetySettings.setupAnswers ?? {}),
     [pending]: message.trim(),
   };
-  const delivery = agent.safetySettings.delivery ?? {
-    mode: "notification" as const,
-    destinationEmail: null,
-    destinationPhone: null,
-  };
-  if (pending === "email") {
-    delivery.destinationEmail = message.trim();
-    delivery.mode = delivery.mode === "notification" ? "email" : delivery.mode;
-  }
-  if (pending === "whatsapp") {
-    delivery.destinationPhone = message.trim();
-    delivery.mode = delivery.mode === "notification" ? "whatsapp" : delivery.mode;
-  }
+  const delivery = applyPendingDeliveryAnswer(
+    agent.safetySettings.delivery ?? {
+      mode: "notification",
+      destinationEmail: null,
+      destinationPhone: null,
+    },
+    pending,
+    message
+  );
 
   await updateBuilderAgent(supabase, {
     agentId: agent.id,

@@ -16,9 +16,8 @@ import {
   runPersistedWorkflow,
 } from "./workflow-executor";
 import {
+  needsPostRunDelivery,
   parseDeliverySettings,
-  shouldDeliverEmail,
-  shouldDeliverWhatsApp,
 } from "../delivery/settings";
 import type { RunAgentParams, RunAgentResult } from "./types";
 
@@ -100,9 +99,11 @@ export async function runAgentEngine(
     const whatsappAlready = result.steps.some(
       (step) => step.key.includes("send_whatsapp") && step.status !== "failed"
     );
-    const needsDelivery =
-      (shouldDeliverEmail(deliverySettings.mode) && !emailedAlready) ||
-      (shouldDeliverWhatsApp(deliverySettings.mode) && !whatsappAlready);
+    const needsDelivery = needsPostRunDelivery({
+      mode: deliverySettings.mode,
+      emailedAlready,
+      whatsappAlready,
+    });
 
     const persistDelivery = async (delivery: NonNullable<RunAgentResult["delivery"]>) => {
       if (!result.runId) return;

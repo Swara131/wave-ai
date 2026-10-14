@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx tsx --test lib/gateway/**/*.test.ts lib/ui/**/*.test.ts lib/email/**/*.test.ts lib/approvals/**/*.test.ts lib/whatsapp/**/*.test.ts lib/billing/**/*.test.ts lib/paypal/**/*.test.ts lib/security/**/*.test.ts lib/dashboard/**/*.test.ts lib/onboarding/**/*.test.ts lib/agent-builder/**/*.test.ts lib/protection/**/*.test.ts lib/audit/**/*.test.ts lib/safety/**/*.test.ts lib/protection/policy-learning/**/*.test.ts lib/marketing/**/*.test.ts lib/templates/**/*.test.ts lib/agents/workflow/**/*.test.ts lib/agents/requirements/**/*.test.ts lib/agents/delivery/**/*.test.ts lib/agents/results/**/*.test.ts lib/agents/runtime/**/*.test.ts lib/agents/protection/**/*.test.ts lib/agents/crm/**/*.test.ts lib/agents/data-source/**/*.test.ts",
+    "test": "npx tsx --test lib/gateway/**/*.test.ts lib/ui/**/*.test.ts lib/email/**/*.test.ts lib/approvals/**/*.test.ts lib/whatsapp/**/*.test.ts lib/billing/**/*.test.ts lib/paypal/**/*.test.ts lib/security/**/*.test.ts lib/dashboard/**/*.test.ts lib/onboarding/**/*.test.ts lib/agent-builder/**/*.test.ts lib/protection/**/*.test.ts lib/audit/**/*.test.ts lib/safety/**/*.test.ts lib/protection/policy-learning/**/*.test.ts lib/marketing/**/*.test.ts lib/templates/**/*.test.ts lib/agents/workflow/**/*.test.ts lib/agents/requirements/**/*.test.ts lib/agents/delivery/**/*.test.ts lib/agents/results/**/*.test.ts lib/agents/runtime/**/*.test.ts lib/agents/protection/**/*.test.ts lib/agents/crm/**/*.test.ts lib/agents/data-source/**/*.test.ts lib/agents/tools/**/*.test.ts",
     "db:diagnose-crm": "tsx scripts/diagnose-crm-table.ts",
     "demo:agent": "tsx scripts/demo-agent.ts",
     "scheduler:once": "tsx scripts/run-scheduler-once.ts",

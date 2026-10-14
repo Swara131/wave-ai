@@ -74,7 +74,7 @@ describe("fallback model provider", () => {
     const turn = await fallbackModelTurn(request);
     assert.equal(turn.type, "complete");
     if (turn.type === "complete") {
-      assert.match(turn.message, /Prepare your agent/i);
+      assert.match(turn.message, /Prepare your agent|GROQ_API_KEY/i);
     }
   });
 
@@ -99,5 +99,23 @@ describe("fallback model provider", () => {
     if (turn.type === "tool_call") {
       assert.equal(turn.toolName, "send_email");
     }
+  });
+
+  it("does not call send_email when the agent is Wave-only", async () => {
+    const agent = mockAgent(["send_email"]);
+    agent.record.safetySettings = {
+      delivery: {
+        mode: "notification",
+        destinationEmail: "ops@example.com",
+        destinationPhone: null,
+      },
+    };
+    const turn = await fallbackModelTurn({
+      agent,
+      task: "Send a confirmation email to the customer",
+      messages: [],
+      enabledToolNames: ["send_email"],
+    });
+    assert.equal(turn.type, "complete");
   });
 });

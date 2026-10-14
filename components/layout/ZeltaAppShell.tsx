@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { PanelLeftClose, PanelLeftOpen, Shield, X } from "lucide-react";
 import AppTopBar from "@/components/layout/AppTopBar";
+import WaveNotificationHost from "@/components/notifications/WaveNotificationHost";
 import { COMPANY_NAME } from "@/lib/public-branding";
 import {
   isSidebarNavActive,
@@ -137,6 +138,7 @@ export default function ZeltaAppShell({ children }: { children: React.ReactNode 
           {children}
         </main>
       </div>
+      <WaveNotificationHost />
     </div>
   );
 }

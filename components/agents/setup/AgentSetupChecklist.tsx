@@ -74,13 +74,17 @@ export default function AgentSetupChecklist({
     }
     if (requirement.configurationType === "email" && value) {
       body.destinationEmail = value;
-      body.deliveryMode = "email";
-      body.outputChoice = "email";
+      if (requirement.key === "email") {
+        body.deliveryMode = "email";
+        body.outputChoice = "email";
+      }
     }
     if (requirement.configurationType === "phone" && value) {
       body.destinationPhone = value;
-      body.deliveryMode = "whatsapp";
-      body.outputChoice = "whatsapp";
+      if (requirement.key === "whatsapp") {
+        body.deliveryMode = "whatsapp";
+        body.outputChoice = "whatsapp";
+      }
     }
     if (requirement.configurationType === "schedule" && value) {
       try {

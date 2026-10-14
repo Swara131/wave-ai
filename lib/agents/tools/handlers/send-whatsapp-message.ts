@@ -1,4 +1,8 @@
-import { parseDeliverySettings, resolveDestinationPhone } from "@/lib/agents/delivery/settings";
+import {
+  parseDeliverySettings,
+  resolveDestinationPhone,
+  shouldBlockExternalDeliveryTools,
+} from "@/lib/agents/delivery/settings";
 import { sendWhatsAppText } from "@/lib/whatsapp/client";
 import { WhatsAppSendError } from "@/lib/whatsapp/errors";
 import { normalizeWhatsAppRecipient } from "@/lib/whatsapp/phone";
@@ -9,6 +13,13 @@ export async function handleSendWhatsAppMessage(
   context: ToolHandlerContext
 ): Promise<ToolExecutionOutcome> {
   const delivery = parseDeliverySettings(context.agent.record.safetySettings);
+  if (shouldBlockExternalDeliveryTools(delivery.mode)) {
+    return {
+      executed: false,
+      error: "This agent notifies you in Wave only. WhatsApp was not sent.",
+      output: { blocked: "wave_only" },
+    };
+  }
   const configuredTo = resolveDestinationPhone({ delivery });
 
   let toE164: string;

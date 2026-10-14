@@ -37,6 +37,7 @@ export async function createAgentResultNotification(
       risk_title: `${params.agentName} result`,
       risk_id: params.runId ?? params.agentId,
       severity: "low",
+      status: "unread",
       channel: "in_app",
       delivery_status: "delivered",
       recipient: params.recipientName,

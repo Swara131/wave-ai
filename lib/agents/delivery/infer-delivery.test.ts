@@ -19,6 +19,24 @@ describe("inferDeliveryModeFromText", () => {
     );
   });
 
+  it("infers Wave-only for notify on Wave, including a scheduled time", () => {
+    assert.equal(
+      inferDeliveryModeFromText("Notify me on Wave every morning at 9am."),
+      "notification"
+    );
+    assert.equal(
+      inferDeliveryModeFromText("Show in Wave at 14:00."),
+      "notification"
+    );
+  });
+
+  it("does not treat notify me by email as WhatsApp", () => {
+    assert.equal(
+      inferDeliveryModeFromText("Notify me by email when the digest is ready."),
+      "email"
+    );
+  });
+
   it("infers email from by email", () => {
     assert.equal(
       inferDeliveryModeFromText(
@@ -32,6 +50,13 @@ describe("inferDeliveryModeFromText", () => {
     assert.equal(
       inferDeliveryModeFromText("Find AI news every morning and give me a digest."),
       "notification"
+    );
+  });
+
+  it("infers email plus WhatsApp only when both channels are named", () => {
+    assert.equal(
+      inferDeliveryModeFromText("Email me and also send WhatsApp."),
+      "both"
     );
   });
 });

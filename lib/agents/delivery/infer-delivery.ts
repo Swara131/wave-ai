@@ -7,11 +7,14 @@ export function inferDeliveryModeFromText(text: string): AgentDeliveryMode {
     /\b(email me|send me an email|send an email|mail me|deliver.*email|to my inbox|in my inbox|by email|on email|via email|email (the )?(report|summary|digest))\b/.test(
       normalized
     );
-  const wantsNotification = /\b(notify me|notification|alert me|in zelta|zelta notification)\b/.test(
-    normalized
-  );
+  const wantsWhatsApp = /\bwhatsapp\b/.test(normalized);
+  const wantsNotification =
+    /\b(notify me|notification|alert me|in zelta|in wave|on wave|wave notification|zelta notification|show in wave|notify on wave)\b/.test(
+      normalized
+    );
 
-  if (wantsEmail && wantsNotification) return "both";
+  if (wantsEmail && wantsWhatsApp) return "both";
+  if (wantsWhatsApp) return "whatsapp";
   if (wantsEmail) return "email";
   if (wantsNotification) return "notification";
 

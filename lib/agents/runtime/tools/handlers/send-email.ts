@@ -1,4 +1,8 @@
 import { sendHtmlEmail } from "@/lib/email/resend-client";
+import {
+  parseDeliverySettings,
+  shouldBlockExternalDeliveryTools,
+} from "@/lib/agents/delivery/settings";
 import { destinationEmailFromAgent } from "../../execution-plan";
 import type { ToolExecutionOutcome, ToolHandlerContext } from "../../types";
 
@@ -21,6 +25,15 @@ export async function handleSendEmail(
     (typeof input.message === "string" && input.message.trim()) ||
     (typeof input.body === "string" && input.body.trim()) ||
     "";
+
+  const delivery = parseDeliverySettings(context.agent.record.safetySettings);
+  if (shouldBlockExternalDeliveryTools(delivery.mode)) {
+    return {
+      executed: false,
+      error: "This agent notifies you in Wave only. Email was not sent.",
+      output: { blocked: "wave_only" },
+    };
+  }
 
   if (!to || !subject || !message) {
     return {

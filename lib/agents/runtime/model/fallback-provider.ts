@@ -1,5 +1,9 @@
 import { isGroqConfigured } from "@/lib/groq/env";
 import {
+  parseDeliverySettings,
+  shouldBlockExternalDeliveryTools,
+} from "@/lib/agents/delivery/settings";
+import {
   destinationEmailFromAgent,
   destinationPhoneFromAgent,
 } from "../execution-plan";
@@ -145,7 +149,11 @@ export async function fallbackModelTurn(
     };
   }
 
+  const deliveryMode = parseDeliverySettings(request.agent.record.safetySettings).mode;
+  const blockExternalDelivery = shouldBlockExternalDeliveryTools(deliveryMode);
+
   if (
+    !blockExternalDelivery &&
     request.enabledToolNames.includes("send_whatsapp_message") &&
     /\bwhatsapp\b/i.test(request.task)
   ) {
@@ -171,6 +179,7 @@ export async function fallbackModelTurn(
   }
 
   if (
+    !blockExternalDelivery &&
     request.enabledToolNames.includes("send_email") &&
     /\b(email|mail)\b/i.test(request.task) &&
     !request.enabledToolNames.includes("web_search")

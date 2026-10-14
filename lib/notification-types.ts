@@ -21,4 +21,4 @@ export interface NotificationItem {
   maxRetries: number;
 }
 
-export type NotificationTab = "unread" | "all" | "email" | "whatsapp" | "slack" | "teams";
+export type NotificationTab = "unread" | "all" | "in_app" | "email" | "whatsapp" | "slack" | "teams";
