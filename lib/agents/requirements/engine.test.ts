@@ -37,14 +37,14 @@ describe("getAgentRequirements", () => {
     const k = result.requirements.filter((item) => item.required).map((item) => item.key);
     assert.ok(k.includes("ai_model"));
     assert.ok(k.includes("web_search"));
-    assert.ok(k.includes("output"));
+    assert.ok(k.includes("wave_notify"));
     assert.ok(!k.includes("email"));
     assert.ok(!k.includes("whatsapp"));
     assert.ok(!k.includes("crm"));
     assert.ok(!k.includes("schedule"));
   });
 
-  it("Agent B: morning email summary needs schedule, email, and recipient", () => {
+  it("Agent B: morning summary uses Wave notify instead of an email recipient", () => {
     const result = getAgentRequirements(
       snapshot({
         name: "Morning Brief",
@@ -56,11 +56,10 @@ describe("getAgentRequirements", () => {
     );
     const k = result.requirements.filter((item) => item.required).map((item) => item.key);
     assert.ok(k.includes("schedule"));
-    assert.ok(k.includes("email"));
     assert.ok(k.includes("web_search"));
-    const email = result.requirements.find((item) => item.key === "email");
-    assert.equal(email?.status, "missing");
-    assert.match(email?.reason ?? "", /email/i);
+    assert.ok(!k.includes("email"));
+    const notify = result.requirements.find((item) => item.key === "wave_notify");
+    assert.equal(notify?.status, "ready");
   });
 
   it("Agent C: CRM updater does not ask for search or email", () => {
@@ -145,7 +144,7 @@ describe("getAgentRequirements", () => {
     assert.ok(!k.includes("email"));
   });
 
-  it("Agent F: weekly research asks for destination, not email", () => {
+  it("Agent F: weekly research uses Wave notify, not email", () => {
     const result = getAgentRequirements(
       snapshot({
         name: "Competitor Watch",
@@ -156,8 +155,9 @@ describe("getAgentRequirements", () => {
     const k = result.requirements.filter((item) => item.required).map((item) => item.key);
     assert.ok(k.includes("schedule"));
     assert.ok(k.includes("web_search"));
-    assert.ok(k.includes("output_destination"));
+    assert.ok(k.includes("wave_notify"));
     assert.ok(!k.includes("email"));
+    assert.ok(!k.includes("output_destination"));
   });
 
   it("simple chatbot does not require CRM or schedule", () => {
@@ -199,7 +199,7 @@ describe("getAgentRequirements", () => {
     assert.ok(!k.includes("email"));
   });
 
-  it("adding email to the workflow adds an email requirement", () => {
+  it("adding send_email to the workflow still uses Wave notify", () => {
     const before = getAgentRequirements(
       snapshot({
         goal: "Find the latest AI news and summarize the top 5 stories.",
@@ -214,7 +214,8 @@ describe("getAgentRequirements", () => {
       })
     );
     assert.ok(!before.requirements.some((item) => item.key === "email"));
-    assert.ok(after.requirements.some((item) => item.key === "email" && item.status === "ready"));
+    assert.ok(!after.requirements.some((item) => item.key === "email"));
+    assert.ok(after.requirements.some((item) => item.key === "wave_notify" && item.status === "ready"));
   });
 
   it("different agents produce different requirement sets", () => {
@@ -238,7 +239,8 @@ describe("getAgentRequirements", () => {
       })
     );
     assert.ok(missing.every((item) => item.required && item.status === "missing"));
-    assert.ok(missing.some((item) => item.key === "email" || item.key === "schedule"));
+    assert.ok(missing.some((item) => item.key === "schedule"));
+    assert.ok(!missing.some((item) => item.key === "email"));
     assert.ok(!missing.some((item) => item.key === "crm"));
   });
 
@@ -301,7 +303,8 @@ describe("getAgentRequirements", () => {
     assert.ok(k.includes("meeting_type"));
     assert.ok(k.includes("research"));
     assert.ok(k.includes("briefing_format"));
-    assert.ok(k.includes("output_destination"));
+    assert.ok(k.includes("wave_notify"));
+    assert.ok(!k.includes("output_destination"));
     assert.ok(!k.includes("whatsapp"));
     assert.ok(!k.includes("email"));
     assert.ok(!k.includes("meeting_details"));
@@ -618,5 +621,168 @@ describe("getAgentRequirements", () => {
     const k = after.requirements.filter((item) => item.required).map((item) => item.key);
     assert.ok(k.includes("email"));
     assert.ok(!k.includes("output_destination"));
+  });
+
+  it("YouTube / link summarizers ask for a URL at run time without blocking setup", () => {
+    const result = getAgentRequirements(
+      snapshot({
+        name: "YouTube Summary Agent",
+        goal: "Summarize a YouTube video or any public platform link I paste.",
+        tools: ["fetch_url"],
+        workflow: {
+          version: 1,
+          nodes: [
+            {
+              id: "fetch-1",
+              type: "tool",
+              category: "tool",
+              name: "Read link",
+              description: "Fetch the provided URL",
+              config: { toolName: "fetch_url" },
+              status: "valid",
+              position: 0,
+            },
+          ],
+          edges: [],
+        },
+      })
+    );
+    assert.equal(result.jobProfile, "url_summary");
+    const source = result.requirements.find((item) => item.key === "source_url");
+    assert.equal(source?.scope, "run");
+    assert.equal(source?.status, "missing");
+    assert.equal(result.ready, true);
+    assert.equal(result.runReady, false);
+    assert.equal(result.runMissing[0]?.key, "source_url");
+    assert.ok(!result.missing.some((item) => item.key === "source_url"));
+    assert.ok(!result.requirements.some((item) => item.key === "ticket_source"));
+  });
+
+  it("venue photo agents ask for an upload at run time without blocking setup", () => {
+    const result = getAgentRequirements(
+      snapshot({
+        name: "Custom Agent",
+        goal: "Turn a venue photo into decoration concepts and a pricing page",
+        tools: [],
+        deliveryMode: "notification",
+        workflow: {
+          version: 1,
+          nodes: [
+            {
+              id: "ai-1",
+              type: "ai_generation",
+              category: "ai",
+              name: "Custom Agent",
+              description: "Turn a venue photo into concepts",
+              config: {},
+              status: "valid",
+              position: 0,
+            },
+          ],
+          edges: [],
+        },
+      })
+    );
+    assert.equal(result.jobProfile, "photo_concepts");
+    const photo = result.requirements.find((item) => item.key === "venue_photo");
+    assert.equal(photo?.scope, "run");
+    assert.equal(photo?.status, "missing");
+    assert.equal(photo?.inputType, "file");
+    assert.equal(result.ready, true);
+    assert.equal(result.runReady, false);
+    assert.equal(result.runMissing[0]?.key, "venue_photo");
+  });
+
+  it("lighting concierge uses Wave notify instead of an email recipient", () => {
+    const result = getAgentRequirements(
+      snapshot({
+        agentId: "lighting-concierge",
+        name: "Lighting Concierge Agent",
+        source: "template:lighting-concierge",
+        goal: "Recommend lighting and request electrician visits",
+        tools: [
+          "create_service_quote",
+          "verify_service_address",
+          "request_electrician_visit",
+          "send_email",
+        ],
+        deliveryMode: "email",
+        workflow: {
+          version: 1,
+          nodes: [
+            {
+              id: "out-1",
+              type: "output_email",
+              category: "output",
+              name: "Send email",
+              description: "Email the lighting plan",
+              config: {},
+              status: "valid",
+              position: 0,
+            },
+          ],
+          edges: [],
+        },
+      })
+    );
+    assert.equal(result.jobProfile, "lighting_concierge");
+    assert.ok(!result.requirements.some((item) => item.key === "email"));
+    const notify = result.requirements.find((item) => item.key === "wave_notify");
+    assert.equal(notify?.label, "Wave notify");
+    assert.equal(notify?.status, "ready");
+    assert.equal(notify?.scope ?? "setup", "setup");
+    const intake = result.requirements.find((item) => item.key === "lighting_intake");
+    assert.equal(intake?.scope, "run");
+  });
+
+  it("travel companion uses Wave notify and a traveler intake", () => {
+    const result = getAgentRequirements(
+      snapshot({
+        agentId: "travel-companion",
+        name: "Travel Companion for Local Discovery Agent",
+        source: "template:travel-companion",
+        goal: "Travel companion itinerary planner for local discovery",
+        tools: ["plan_travel_itinerary", "request_travel_booking"],
+        deliveryMode: "email",
+      })
+    );
+    assert.equal(result.jobProfile, "travel_companion");
+    assert.ok(!result.requirements.some((item) => item.key === "email"));
+    const intake = result.requirements.find((item) => item.key === "travel_intake");
+    assert.equal(intake?.scope, "run");
+  });
+
+  it("wedding planner uses Wave notify and an event intake", () => {
+    const result = getAgentRequirements(
+      snapshot({
+        agentId: "wedding-celebration-planner",
+        name: "Wedding & Celebration Planner Agent",
+        source: "template:wedding-celebration-planner",
+        goal: "Wedding & Celebration Planner for stated preferences",
+        tools: ["plan_wedding_event", "request_wedding_deposit"],
+        deliveryMode: "email",
+      })
+    );
+    assert.equal(result.jobProfile, "wedding_planner");
+    assert.ok(!result.requirements.some((item) => item.key === "email"));
+    const intake = result.requirements.find((item) => item.key === "wedding_intake");
+    assert.equal(intake?.scope, "run");
+  });
+
+  it("group decision planner uses Wave notify and a group intake", () => {
+    const result = getAgentRequirements(
+      snapshot({
+        agentId: "group-decision-planner",
+        name: "Group Decision Planner Agent",
+        source: "template:group-decision-planner",
+        goal: "Group Decision Planner for restaurant outings",
+        tools: ["plan_group_outing", "request_group_reservation"],
+        deliveryMode: "email",
+      })
+    );
+    assert.equal(result.jobProfile, "group_decision_planner");
+    assert.ok(!result.requirements.some((item) => item.key === "email"));
+    const intake = result.requirements.find((item) => item.key === "group_intake");
+    assert.equal(intake?.scope, "run");
   });
 });

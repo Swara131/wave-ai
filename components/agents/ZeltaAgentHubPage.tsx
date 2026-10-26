@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   Bot,
   CheckCircle2,
@@ -30,6 +30,10 @@ import { normalizeTime24 } from "@/lib/agents/scheduling/time-input";
 import { ScheduleTimePicker } from "@/components/agents/ScheduleTimePicker";
 import AgentWorkflowCanvas from "@/components/agents/workspace/AgentWorkflowCanvas";
 import { buildWorkflowFromAgent } from "@/lib/agents/workflow-nodes";
+import { CREATE_QUOTE_TOOL, LIGHTING_TEMPLATE_SLUG } from "@/lib/lighting-concierge/constants";
+import { PLAN_ITINERARY_TOOL, TRAVEL_TEMPLATE_SLUG } from "@/lib/travel-companion/constants";
+import { PLAN_WEDDING_TOOL, WEDDING_TEMPLATE_SLUG } from "@/lib/wedding-planner/constants";
+import { PLAN_GROUP_TOOL, GROUP_TEMPLATE_SLUG } from "@/lib/group-planner/constants";
 
 interface AgentPayload {
   id: string;
@@ -172,7 +176,9 @@ function RunStatusIcon({ status }: { status: string }) {
 
 export default function ZeltaAgentHubPage() {
   const params = useParams();
+  const router = useRouter();
   const slug = typeof params.agentId === "string" ? params.agentId.trim() : "";
+  const autoContinueRef = useRef(false);
   const [tab, setTab] = useState<Tab>("overview");
   const [agent, setAgent] = useState<AgentPayload | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
@@ -338,6 +344,47 @@ export default function ZeltaAgentHubPage() {
     }
   };
 
+  const runNowRef = useRef(handleRunNow);
+  runNowRef.current = handleRunNow;
+
+  useEffect(() => {
+    if (autoContinueRef.current || loading || !agent || !slug) return;
+    const paramsFromUrl = new URLSearchParams(window.location.search);
+    const autoRun = paramsFromUrl.get("run") === "1";
+    const tabParam = paramsFromUrl.get("tab");
+    if (!autoRun && tabParam !== "runs") return;
+    autoContinueRef.current = true;
+    const lighting =
+      slug.includes(LIGHTING_TEMPLATE_SLUG) || (agent.tools ?? []).includes(CREATE_QUOTE_TOOL);
+    const travel =
+      slug.includes(TRAVEL_TEMPLATE_SLUG) || (agent.tools ?? []).includes(PLAN_ITINERARY_TOOL);
+    const wedding =
+      slug.includes(WEDDING_TEMPLATE_SLUG) || (agent.tools ?? []).includes(PLAN_WEDDING_TOOL);
+    const group =
+      slug.includes(GROUP_TEMPLATE_SLUG) || (agent.tools ?? []).includes(PLAN_GROUP_TOOL);
+    if (autoRun && lighting) {
+      router.replace(`/agents/${encodeURIComponent(slug)}/lighting`);
+      return;
+    }
+    if (autoRun && travel) {
+      router.replace(`/agents/${encodeURIComponent(slug)}/travel`);
+      return;
+    }
+    if (autoRun && wedding) {
+      router.replace(`/agents/${encodeURIComponent(slug)}/wedding`);
+      return;
+    }
+    if (autoRun && group) {
+      router.replace(`/agents/${encodeURIComponent(slug)}/group`);
+      return;
+    }
+    setTab("runs");
+    if (autoRun) {
+      void runNowRef.current();
+    }
+    router.replace(`/agents/${encodeURIComponent(slug)}`, { scroll: false });
+  }, [agent, loading, slug, router]);
+
   const handleSaveSettings = async () => {
     if (!slug || settingsSaving) return;
     setSettingsSaving(true);
@@ -477,6 +524,26 @@ export default function ZeltaAgentHubPage() {
           </div>
         </div>
         <div className="zagent-header-actions">
+          {slug.includes(TRAVEL_TEMPLATE_SLUG) || (agent.tools ?? []).includes(PLAN_ITINERARY_TOOL) ? (
+            <Link href={`/agents/${encodeURIComponent(slug)}/travel`} className="ds-btn ds-btn-primary">
+              Open Travel Companion
+            </Link>
+          ) : null}
+          {slug.includes(WEDDING_TEMPLATE_SLUG) || (agent.tools ?? []).includes(PLAN_WEDDING_TOOL) ? (
+            <Link href={`/agents/${encodeURIComponent(slug)}/wedding`} className="ds-btn ds-btn-primary">
+              Open Wedding Planner
+            </Link>
+          ) : null}
+          {slug.includes(GROUP_TEMPLATE_SLUG) || (agent.tools ?? []).includes(PLAN_GROUP_TOOL) ? (
+            <Link href={`/agents/${encodeURIComponent(slug)}/group`} className="ds-btn ds-btn-primary">
+              Open Group Decision Planner
+            </Link>
+          ) : null}
+          {slug.includes(LIGHTING_TEMPLATE_SLUG) || (agent.tools ?? []).includes(CREATE_QUOTE_TOOL) ? (
+            <Link href={`/agents/${encodeURIComponent(slug)}/lighting`} className="ds-btn ds-btn-primary">
+              Open Lighting Concierge
+            </Link>
+          ) : null}
           <button
             type="button"
             className="ds-btn ds-btn-primary"

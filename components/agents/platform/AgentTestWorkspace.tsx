@@ -16,6 +16,7 @@ import type {
   AgentPlatformLifecycle,
   PlatformCheckResult,
 } from "@/lib/agents/platform/lifecycle-types";
+import { agentRunInputPath } from "@/lib/agents/platform/run-input-path";
 import type { AgentRequirement, AgentRequirementsResult } from "@/lib/agents/requirements/types";
 import type { RecordAnalysisResult } from "@/lib/agents/runtime/analysis/record-validation";
 import type {
@@ -64,6 +65,7 @@ export default function AgentTestWorkspace() {
   const [recordsProcessed, setRecordsProcessed] = useState(0);
   const [analysis, setAnalysis] = useState<RecordAnalysisResult | null>(null);
   const [phase, setPhase] = useState<"idle" | "preparing" | "running">("idle");
+  const [proposalId, setProposalId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!agentId) return;
@@ -80,6 +82,10 @@ export default function AgentTestWorkspace() {
       setLifecycle(nextLifecycle);
       if (!reqPayload.ready) {
         router.replace(`/agents/${encodeURIComponent(agentId)}/prepare`);
+        return;
+      }
+      if (reqPayload.runMissing?.length) {
+        router.replace(agentRunInputPath(agentId, reqPayload.runMissing));
       }
     } catch {
       setError("Could not load the test workspace.");
@@ -102,6 +108,7 @@ export default function AgentTestWorkspace() {
     setAnalysis(null);
     setRecordsProcessed(0);
     setQueryStatus("not_run");
+    setProposalId(null);
     window.setTimeout(() => setPhase("running"), 280);
     try {
       const response = await fetch(
@@ -119,6 +126,7 @@ export default function AgentTestWorkspace() {
         runError?: string | null;
         error?: string;
         missing?: AgentRequirement[];
+        proposalId?: string | null;
       };
       if (payload.missing?.length) {
         router.replace(`/agents/${encodeURIComponent(agentId)}/prepare`);
@@ -129,6 +137,7 @@ export default function AgentTestWorkspace() {
       setAnalysis(payload.analysis ?? null);
       setQueryStatus(payload.queryStatus ?? "not_run");
       setRecordsProcessed(payload.recordsProcessed ?? 0);
+      setProposalId(payload.proposalId ?? null);
       const nextOutcome =
         payload.outcome ??
         (payload.success ? "success" : response.ok ? "failed" : "failed");
@@ -160,7 +169,7 @@ export default function AgentTestWorkspace() {
           ? "danger"
           : "neutral";
 
-  if (loading || (requirements && !requirements.ready)) {
+  if (loading || (requirements && (!requirements.ready || requirements.runMissing?.length))) {
     return (
       <PageShell maxWidth="7xl" className="zplat-page ztest-page">
         <Skeleton lines={4} />
@@ -250,12 +259,35 @@ export default function AgentTestWorkspace() {
               onRetry={() => void runFullTest()}
             />
           ) : null}
+          {!showEvidence && outcome === "awaiting_approval" ? (
+            <ErrorState
+              title="Waiting for your approval"
+              description={
+                runSummary ??
+                "This agent cannot continue until you approve it on the Approvals page."
+              }
+              fixLabel="Open Approvals"
+              fixHref={
+                proposalId
+                  ? `/approvals?proposal=${encodeURIComponent(proposalId)}`
+                  : "/approvals"
+              }
+            />
+          ) : null}
           {!showEvidence && outcome === "failed" ? (
             <ErrorState
               title="Wave couldn't finish this test."
               description={reason ?? "The agent stopped before producing a result."}
-              fixLabel={fixCheck?.fixLabel ?? "Fix connection"}
-              fixHref={fixCheck?.fixHref}
+              fixLabel={
+                /No file is uploaded/i.test(reason ?? "")
+                  ? "Upload a file"
+                  : fixCheck?.fixLabel
+              }
+              fixHref={
+                /No file is uploaded/i.test(reason ?? "")
+                  ? `/agents/${encodeURIComponent(agentId)}/prepare`
+                  : fixCheck?.fixHref
+              }
               onFix={() => void runFullTest()}
               technical={execution?.message ?? error}
             />

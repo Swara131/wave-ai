@@ -6,6 +6,7 @@ import "./globals.css";
 import "./landing-light.css";
 import "./zelta-ui.css";
 import "./workflow-canvas.css";
+import "./studio-flow.css";
 import "./wave-saas.css";
 
 const geistSans = Geist({

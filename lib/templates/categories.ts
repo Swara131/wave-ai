@@ -12,6 +12,9 @@ export const TEMPLATE_FILTERS: TemplateFilterOption[] = [
   { id: "operations-productivity", label: "Operations & Productivity" },
   { id: "finance-commerce", label: "Finance & Commerce" },
   { id: "developer-ai-safety", label: "Developer & AI Safety" },
+  { id: "home-services", label: "Home Services / Smart Recommendations" },
+  { id: "travel-lifestyle", label: "Travel & Lifestyle" },
+  { id: "events-planning", label: "Events & Planning" },
 ];
 
 export const MARKETPLACE_CATEGORY_LABELS: Record<Exclude<TemplateFilterId, "all">, string> = {
@@ -20,6 +23,9 @@ export const MARKETPLACE_CATEGORY_LABELS: Record<Exclude<TemplateFilterId, "all"
   "operations-productivity": "Operations & Productivity",
   "finance-commerce": "Finance & Commerce",
   "developer-ai-safety": "Developer & AI Safety",
+  "home-services": "Home Services / Smart Recommendations",
+  "travel-lifestyle": "Travel & Lifestyle",
+  "events-planning": "Events & Planning",
 };
 
 export function matchesTemplateFilter(
@@ -86,6 +92,9 @@ export function countTemplatesByCategory(templates: AgentTemplate[]): Record<Tem
     "operations-productivity": 0,
     "finance-commerce": 0,
     "developer-ai-safety": 0,
+    "home-services": 0,
+    "travel-lifestyle": 0,
+    "events-planning": 0,
   } as Record<TemplateFilterId, number>;
 
   for (const template of published) {

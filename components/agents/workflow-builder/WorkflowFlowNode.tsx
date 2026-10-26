@@ -20,7 +20,6 @@ export default function WorkflowFlowNode({ data, selected }: NodeProps) {
   return (
     <div
       className={`wf-rf-node ${toneClass(node)} ${selected ? "is-selected" : ""} ${runStatus ? `is-run-${runStatus}` : ""}`}
-      style={{ animationDelay: `${Math.min(node.position, 8) * 70}ms` }}
     >
       {runStatus === "running" ? <span className="wf-rf-pulse" aria-hidden="true" /> : null}
       <Handle type="target" position={Position.Top} aria-label={`${node.name} input`} />

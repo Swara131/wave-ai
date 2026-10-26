@@ -278,8 +278,8 @@ export default function AgentConnectionSetupWizard() {
     if (selectedAgentId) {
       saveAgentLifecycle(selectedAgentId, {
         connectionAcknowledged: true,
-        connectionTestPassed: true,
-        testActionPassed: true,
+        connectionTestPassed: testStatus === "success",
+        testActionPassed: testStatus === "success",
       });
     }
     setStep("complete");

@@ -69,6 +69,68 @@ export async function summarizeToolResultsForTask(params: {
     }).text;
   }
 
+  if (params.toolName === "fetch_url") {
+    const error =
+      typeof params.toolError === "string" && params.toolError.trim()
+        ? params.toolError.trim()
+        : "";
+    const title = typeof params.toolOutput.title === "string" ? params.toolOutput.title.trim() : "";
+    const url = typeof params.toolOutput.url === "string" ? params.toolOutput.url.trim() : "";
+    const text = typeof params.toolOutput.text === "string" ? params.toolOutput.text.trim() : "";
+    const description =
+      typeof params.toolOutput.description === "string"
+        ? params.toolOutput.description.trim()
+        : "";
+    const warning =
+      typeof params.toolOutput.warning === "string" ? params.toolOutput.warning.trim() : "";
+
+    if (error || (!title && !text && !description)) {
+      return error || "Wave could not read that link. No summary was invented.";
+    }
+
+    if (isGroqConfigured() && (text || description || title)) {
+      try {
+        const prompt = [
+          "Summarize only the retrieved page or video metadata below.",
+          "Return JSON: {\"summary\":\"Markdown summary. Include a Sources list with the real URL. If transcript/body is missing, say so. Never invent quotes, tickets, or facts.\"}",
+          "",
+          `Task: ${params.task}`,
+          warning ? `Constraint: ${warning}` : "",
+          `Title: ${title}`,
+          `URL: ${url}`,
+          `Description: ${description}`,
+          "Extracted text:",
+          (text || description || title).slice(0, 8000),
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+        const raw = await groqJsonCompletion(prompt, {
+          kind: "agent-builder",
+          temperature: 0.2,
+          system:
+            "You summarize retrieved web or video metadata only. If the body or transcript is missing, say that. Never invent tickets, speakers, or quotes.",
+        });
+        const parsed = parseJsonText(raw) as { summary?: string };
+        if (typeof parsed.summary === "string" && parsed.summary.trim().length > 20) {
+          return parsed.summary.trim();
+        }
+      } catch {
+        /* structured fallback */
+      }
+    }
+
+    const lines = [
+      title ? `# ${title}` : "# Link summary",
+      "",
+      description,
+      text ? `\n${text.slice(0, 2500)}` : "",
+      warning ? `\n_${warning}_` : "",
+      url ? `\nSources:\n- ${url}` : "",
+    ];
+    return lines.filter((line) => line !== "").join("\n").trim();
+  }
+
   if (params.toolName === "web_search") {
     const tavilyAnswer =
       typeof params.toolOutput.answer === "string"

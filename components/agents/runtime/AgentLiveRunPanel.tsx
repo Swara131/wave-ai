@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Check, Loader2, XCircle } from "lucide-react";
 import AgentResultRenderer from "@/components/agents/results/AgentResultRenderer";
 import type { RunAgentResult } from "@/lib/agents/runtime/types";
@@ -111,7 +112,18 @@ export default function AgentLiveRunPanel({
       ) : null}
 
       {result?.status === "awaiting_approval" ? (
-        <p className="arc-result-title">WAITING_FOR_APPROVAL — the protected action has not run.</p>
+        <p className="arc-result-title">
+          WAITING_FOR_APPROVAL — this agent has not run.{" "}
+          <Link
+            href={
+              result.proposalId
+                ? `/approvals?proposal=${encodeURIComponent(result.proposalId)}`
+                : "/approvals"
+            }
+          >
+            Review on Approvals
+          </Link>
+        </p>
       ) : null}
 
       {result?.status === "failed" || error ? (

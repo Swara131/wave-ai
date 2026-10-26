@@ -39,9 +39,10 @@ const READ_ONLY_TOOLS = new Set([
   "query_supabase",
   "google_sheets",
   "x_search",
+  "fetch_url",
 ]);
 
-const FINANCIAL_TOOLS = new Set(["issue_refund"]);
+const FINANCIAL_TOOLS = new Set(["issue_refund", "create_service_quote", "request_travel_booking", "request_wedding_deposit", "request_group_reservation"]);
 
 const KNOWN_RESTRICTIONS: MissionRestriction[] = [
   "no_destructive_operations",

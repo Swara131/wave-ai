@@ -8,7 +8,7 @@ import { COMPANY_NAME } from "@/lib/public-branding";
 
 const LINKS = [
   { href: "#product", label: "Product" },
-  { href: "/dashboard/templates", label: "Templates" },
+  { href: "#templates", label: "Templates" },
   { href: "#safety", label: "Safety" },
   { href: "#pricing", label: "Pricing" },
 ];

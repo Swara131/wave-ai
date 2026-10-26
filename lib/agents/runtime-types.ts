@@ -182,6 +182,12 @@ export interface AgentSafetySettings extends AgentSafetySettingsExtended {
   /** Persisted prepare-your-agent answers, keyed by requirement id. */
   setupAnswers?: Record<string, string>;
   pendingRequirementKey?: string | null;
+  /** Human approval required before this agent may run. */
+  activation?: {
+    status: "pending" | "approved" | "rejected";
+    proposalId?: string;
+    decidedAt?: string;
+  };
   requirementManifest?: {
     generatedAt: string;
     keys: string[];
@@ -195,6 +201,31 @@ export interface AgentSafetySettings extends AgentSafetySettingsExtended {
     lastRun: SimulationRun | null;
   };
   dataSource?: AgentDataSourceConfig;
+  lightingConcierge?: {
+    rates?: {
+      labourPerHourInr: number;
+      ambientFixtureInr: number;
+      taskFixtureInr: number;
+      accentFixtureInr: number;
+      travelInr: number;
+      currency: "INR";
+      source: "provider_configured";
+      updatedAt: string;
+    };
+    jobs?: Array<Record<string, unknown>>;
+  };
+  travelCompanion?: {
+    bookingThresholdInr?: number;
+    trips?: Array<Record<string, unknown>>;
+  };
+  weddingPlanner?: {
+    depositThresholdInr?: number;
+    events?: Array<Record<string, unknown>>;
+  };
+  groupPlanner?: {
+    reservationThresholdInr?: number;
+    outings?: Array<Record<string, unknown>>;
+  };
 }
 
 export interface AgentRunLimits {

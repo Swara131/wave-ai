@@ -67,6 +67,15 @@ export default function NotificationCard({
           : "ring-white/8"
       }`}
       style={{ animationDelay: `${index * 80}ms` }}
+      onClick={() => onPreview(notification)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onPreview(notification);
+        }
+      }}
+      role="button"
+      tabIndex={0}
     >
       {/* Severity accent */}
       <div
@@ -111,16 +120,19 @@ export default function NotificationCard({
               </span>
             </div>
 
-            <h3 className="mt-3 text-base font-semibold text-zinc-100 sm:text-lg">
+            <h3 className="mt-3 text-base font-semibold text-[var(--ds-text-primary)] sm:text-lg">
               {notification.risk}
             </h3>
-            <p className="mt-1 line-clamp-2 text-sm text-zinc-500">{notification.subject}</p>
+            <p className="mt-1 line-clamp-2 text-sm text-[var(--ds-text-secondary)]">{notification.subject}</p>
           </div>
 
           {notification.status === "unread" && (
             <button
               type="button"
-              onClick={() => onMarkRead(notification.id)}
+              onClick={(event) => {
+                event.stopPropagation();
+                onMarkRead(notification.id);
+              }}
               className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-white/5 px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:bg-white/8 hover:text-zinc-200"
             >
               <CheckCheck className="h-3.5 w-3.5" strokeWidth={2} />
@@ -136,7 +148,7 @@ export default function NotificationCard({
               <Clock className="h-3 w-3" strokeWidth={2} />
               Timestamp
             </div>
-            <p className="mt-1 font-mono text-xs text-zinc-300">
+            <p className="mt-1 font-mono text-xs text-[var(--ds-text-primary)]" suppressHydrationWarning>
               {new Date(notification.timestamp).toLocaleString("en-US", {
                 month: "short",
                 day: "numeric",
@@ -198,20 +210,30 @@ export default function NotificationCard({
         </div>
 
         {/* Actions */}
-        <div className="mt-5 flex flex-wrap gap-2 border-t border-white/6 pt-4">
+        <div
+          className="mt-5 flex flex-wrap gap-2 border-t border-white/6 pt-4"
+          onClick={(event) => event.stopPropagation()}
+        >
           <button
             type="button"
             onClick={() => onPreview(notification)}
             className="notification-btn notification-btn-preview inline-flex items-center gap-2"
           >
             <Eye className="h-4 w-4" strokeWidth={2} />
-            Preview Email
+            {notification.openHref?.startsWith("/runs/")
+              ? "Open Result"
+              : notification.channel === "in_app" || notification.templateType === "agent_result"
+                ? "Open"
+                : "Preview"}
           </button>
 
           {canRetry && notification.retryCount < notification.maxRetries && (
             <button
               type="button"
-              onClick={handleRetry}
+              onClick={(event) => {
+                event.stopPropagation();
+                void handleRetry();
+              }}
               disabled={retrying}
               className="notification-btn notification-btn-retry inline-flex items-center gap-2"
             >

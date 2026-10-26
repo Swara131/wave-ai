@@ -10,6 +10,15 @@ export const ALLOWED_AGENT_TOOLS = [
   "delete_crm_record",
   "query_database",
   "create_calendar_event",
+  "create_service_quote",
+  "verify_service_address",
+  "request_electrician_visit",
+  "plan_travel_itinerary",
+  "request_travel_booking",
+  "plan_wedding_event",
+  "request_wedding_deposit",
+  "plan_group_outing",
+  "request_group_reservation",
 ] as const;
 
 export type AllowedAgentTool = (typeof ALLOWED_AGENT_TOOLS)[number];
@@ -34,7 +43,7 @@ function buildPrompt(sentence: string): string {
 {
   "name": "short lowercase name with hyphens",
   "description": "one sentence what it does",
-  "tools": [array of tool names from: send_email, send_whatsapp_message, issue_refund, update_crm_record, query_database, create_calendar_event],
+  "tools": [array of tool names from: send_email, send_whatsapp_message, issue_refund, update_crm_record, query_database, create_calendar_event, plan_wedding_event, request_wedding_deposit, plan_group_outing, request_group_reservation],
   "triggerType": "email|webhook|schedule",
   "suggestedThreshold": integer (e.g., 5000)
 }

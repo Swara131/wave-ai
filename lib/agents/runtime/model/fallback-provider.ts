@@ -6,7 +6,9 @@ import {
 import {
   destinationEmailFromAgent,
   destinationPhoneFromAgent,
+  setupAnswersFromAgent,
 } from "../execution-plan";
+import { extractHttpUrl } from "@/lib/http/outbound-url";
 import { resolveDatabaseQueryInput, taskNeedsRecordLookup } from "../data/resolve-query-source";
 import type { ModelCompletionRequest, ModelTurn } from "../types";
 import { summarizeToolResultsForTask } from "./summarize-results";
@@ -116,6 +118,29 @@ export async function fallbackModelTurn(
       type: "complete",
       message: summary,
       reasoning: "Summarized real tool output.",
+    };
+  }
+
+  const sourceUrl =
+    setupAnswersFromAgent(request.agent.record).source_url ||
+    extractHttpUrl(request.task) ||
+    "";
+
+  if (request.enabledToolNames.includes("fetch_url")) {
+    if (!sourceUrl) {
+      return {
+        type: "complete",
+        message:
+          "Paste a public YouTube, article, or other page URL so Wave can read it. Wave will not invent a summary without that link.",
+        reasoning: "Missing source URL for fetch_url.",
+      };
+    }
+    return {
+      type: "tool_call",
+      toolName: "fetch_url",
+      actionType: "research.fetch_url",
+      toolInput: { url: sourceUrl },
+      reasoning: "Need the real page or video content before summarizing.",
     };
   }
 
@@ -242,13 +267,13 @@ export async function fallbackModelTurn(
     };
   }
 
-  if (request.enabledToolNames.includes("http_request")) {
+  if (request.enabledToolNames.includes("http_request") && sourceUrl) {
     return {
       type: "tool_call",
       toolName: "http_request",
       actionType: "integration.http",
-      toolInput: { url: "https://httpbin.org/get", method: "GET" },
-      reasoning: "Fetching external data via HTTP.",
+      toolInput: { url: sourceUrl, method: "GET" },
+      reasoning: "Fetching the provided URL.",
     };
   }
 

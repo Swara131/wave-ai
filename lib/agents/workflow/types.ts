@@ -191,4 +191,9 @@ export const HIGH_IMPACT_WORKFLOW_TOOLS = [
   "send_whatsapp_message",
   "update_crm_record",
   "delete_crm_record",
+  "create_service_quote",
+  "request_electrician_visit",
+  "request_travel_booking",
+  "request_wedding_deposit",
+  "request_group_reservation",
 ] as const;

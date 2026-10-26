@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     const preview = generateDecisionAgentFromPrompt({
       prompt: body.prompt,
       name: body.name,
-      decisionType: body.decisionType ?? body.templateId ?? "custom",
+      decisionType: body.decisionType ?? "custom",
     });
     return secureJson({ success: true, preview });
   } catch (err) {

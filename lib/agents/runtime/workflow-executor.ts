@@ -18,9 +18,13 @@ import {
   workflowPlanFromGraph,
 } from "./execution-plan";
 import { resolveToolName } from "@/lib/agents/tools/catalog";
+import { extractHttpUrl } from "@/lib/http/outbound-url";
 import { executeProtectedTool } from "./protected-tool";
+import { completeAiWorkflowStep, isAiWorkflowNode } from "./workflow-ai-step";
 import type { RuntimeActivityLogger } from "./activity/activity-logger";
 import type { LoadedAgent, RunAgentResult, RuntimeLimits } from "./types";
+import type { SourceImage } from "./source-image";
+import type { ConceptImage } from "./concept-image";
 
 function sortedNodes(agent: LoadedAgent): WorkflowGraphNode[] {
   const graph = workflowGraphFromAgent(agent.record);
@@ -32,7 +36,7 @@ export function agentHasPersistedWorkflow(agent: LoadedAgent): boolean {
   return workflowPlanFromGraph(workflowGraphFromAgent(agent.record)).length > 0;
 }
 
-function toolInputForNode(params: {
+export function toolInputForNode(params: {
   node: WorkflowGraphNode;
   agent: LoadedAgent;
   task: string;
@@ -45,6 +49,12 @@ function toolInputForNode(params: {
   if (!toolName) return null;
 
   const answers = setupAnswersFromAgent(params.agent.record);
+
+  if (toolName === "fetch_url") {
+    const url = answers.source_url || extractHttpUrl(params.task) || "";
+    if (!url) return { missing: "source_url" };
+    return { url };
+  }
 
   if (toolName === "web_search" || toolName === "x_search") {
     return { query: deriveWebSearchQuery(params.task, params.agent), count: 5 };
@@ -74,6 +84,10 @@ function toolInputForNode(params: {
     });
   }
 
+  if (toolName === "read_document") {
+    return { documentId: "latest" };
+  }
+
   if (toolName === "update_crm_record") {
     return {
       ...answers,
@@ -92,9 +106,14 @@ function toolInputForNode(params: {
 }
 
 function isExecutableToolNode(node: WorkflowGraphNode): boolean {
+  if (isAiWorkflowNode(node)) return false;
   return Boolean(
     node.config.toolName || node.type === "output_email" || node.type === "tool"
   );
+}
+
+function isDeliveryTool(toolName: string): boolean {
+  return toolName === "send_email" || toolName === "send_whatsapp_message";
 }
 
 export async function runPersistedWorkflow(params: {
@@ -111,9 +130,16 @@ export async function runPersistedWorkflow(params: {
   initialLastToolOutput?: Record<string, unknown>;
   initialToolCalls?: number;
   initialActionSequence?: number;
+  sourceImage?: SourceImage;
 }): Promise<RunAgentResult> {
   const nodes = sortedNodes(params.agent);
   let summary = params.initialSummary ?? "";
+  let conceptImages: ConceptImage[] = [];
+  let generationError: string | undefined;
+  let generationProvider: string | undefined;
+  let generationModel: string | undefined;
+  let generationErrorKind: string | undefined;
+  let generationRetryable: boolean | undefined;
   let analysis: RecordAnalysisResult | undefined;
   let lastToolName: string | null = params.initialLastToolName ?? null;
   let lastToolOutput: Record<string, unknown> = params.initialLastToolOutput ?? {};
@@ -127,6 +153,87 @@ export async function runPersistedWorkflow(params: {
   const turns = 1;
 
   const startIndex = Math.max(0, params.startNodeIndex ?? 0);
+  const sourceUrl =
+    setupAnswersFromAgent(params.agent.record).source_url || extractHttpUrl(params.task) || "";
+  const graphHasFetch = nodes.some(
+    (node) => resolveToolName(node.config.toolName ?? "") === "fetch_url"
+  );
+
+  if (sourceUrl && params.agent.enabledTools.includes("fetch_url") && !graphHasFetch && startIndex === 0) {
+    actionSequence += 1;
+    const fetched = await executeProtectedTool({
+      admin: params.admin,
+      agent: params.agent,
+      userId: params.userId,
+      runId: params.runId,
+      task: params.task,
+      toolName: "fetch_url",
+      toolInput: { url: sourceUrl },
+      activity: params.activity,
+      toolCalls,
+      actionSequence,
+      turns,
+      maxRetries: params.limits.maxRetries,
+      workflowNodeIndex: 0,
+      lastToolName,
+      lastToolOutput,
+      summary,
+    });
+    if (fetched.kind === "awaiting_approval" || fetched.kind === "failed") {
+      return fetched.result;
+    }
+    if (fetched.kind === "blocked") {
+      await params.activity.finishRun({
+        runId: params.runId,
+        status: "failed",
+        summary: null,
+        errorMessage: fetched.reason,
+      });
+      return {
+        runId: params.runId,
+        status: "failed",
+        summary: null,
+        error: fetched.reason,
+        proposalId: null,
+        toolCalls: fetched.toolCalls,
+        turns,
+        steps: params.activity.getSteps(),
+      };
+    }
+    toolCalls = fetched.toolCalls;
+    lastToolName = "fetch_url";
+    lastToolOutput = fetched.outcome.output;
+    if (!fetched.outcome.executed) {
+      const error =
+        "error" in fetched.outcome
+          ? fetched.outcome.error
+          : "Wave could not read that link.";
+      await params.activity.finishRun({
+        runId: params.runId,
+        status: "failed",
+        summary: null,
+        errorMessage: error,
+      });
+      return {
+        runId: params.runId,
+        status: "failed",
+        summary: null,
+        error,
+        proposalId: null,
+        toolCalls,
+        turns,
+        steps: params.activity.getSteps(),
+      };
+    }
+    summary = await summarizeToolResultsForTask({
+      task: params.task,
+      agentName: params.agent.record.name,
+      toolName: "fetch_url",
+      toolOutput: lastToolOutput,
+      agentRecord: params.agent.record,
+    });
+  }
+
   for (let nodeIndex = startIndex; nodeIndex < nodes.length; nodeIndex += 1) {
     const node = nodes[nodeIndex];
     await params.activity.logRunStep({
@@ -147,7 +254,7 @@ export async function runPersistedWorkflow(params: {
       continue;
     }
 
-    if (node.category === "ai") {
+    if (isAiWorkflowNode(node)) {
       if (lastToolName === "query_supabase" || lastToolName === "query_database") {
         const formatted = formatQueryToolReport({
           toolOutput: lastToolOutput,
@@ -156,7 +263,7 @@ export async function runPersistedWorkflow(params: {
         });
         summary = formatted.text;
         analysis = formatted.analysis;
-      } else if (lastToolName && Object.keys(lastToolOutput).length > 0 && !analysis) {
+      } else if (lastToolName && Object.keys(lastToolOutput).length > 0) {
         summary = await summarizeToolResultsForTask({
           task: params.task,
           agentName: params.agent.record.name,
@@ -165,11 +272,38 @@ export async function runPersistedWorkflow(params: {
           agentRecord: params.agent.record,
         });
       }
+      if (!summary.trim()) {
+        const step = await completeAiWorkflowStep({
+          task: params.task,
+          agent: params.agent.record,
+          lastToolName,
+          lastToolOutput,
+          existingSummary: summary,
+          sourceImage: params.sourceImage,
+        });
+        summary = step.summary;
+        if (step.conceptImages.length) conceptImages = step.conceptImages;
+        generationError = step.generationError;
+        generationProvider = step.generationProvider;
+        generationModel = step.generationModel;
+        generationErrorKind = step.generationErrorKind;
+        generationRetryable = step.generationRetryable;
+      }
       await params.activity.logRunStep({
         runId: params.runId,
         key: `workflow.${node.id}.done`,
         label: `${node.name} ✓`,
         detail: summary.slice(0, 180),
+      });
+      continue;
+    }
+
+    if (node.category === "output" && !isExecutableToolNode(node)) {
+      await params.activity.logRunStep({
+        runId: params.runId,
+        key: `workflow.${node.id}.done`,
+        label: `${node.name} ✓`,
+        detail: summary ? summary.slice(0, 180) : "Result stays in Wave.",
       });
       continue;
     }
@@ -181,11 +315,20 @@ export async function runPersistedWorkflow(params: {
     const toolName = resolveToolName(
       node.config.toolName ?? (node.type === "output_email" ? "send_email" : "")
     );
-    const delivery = parseDeliverySettings(params.agent.record.safetySettings);
     if (
-      (toolName === "send_email" || toolName === "send_whatsapp_message") &&
-      shouldBlockExternalDeliveryTools(delivery.mode)
+      sourceUrl &&
+      (toolName === "query_supabase" || toolName === "query_database" || toolName === "read_document")
     ) {
+      await params.activity.logRunStep({
+        runId: params.runId,
+        key: `workflow.${node.id}.skipped`,
+        label: `${node.name} skipped`,
+        detail: "This run is summarizing a provided link, so ticket or file sources were not queried.",
+      });
+      continue;
+    }
+    const delivery = parseDeliverySettings(params.agent.record.safetySettings);
+    if (isDeliveryTool(toolName) && shouldBlockExternalDeliveryTools(delivery.mode)) {
       await params.activity.logRunStep({
         runId: params.runId,
         key: `workflow.${node.id}.skipped`,
@@ -194,10 +337,17 @@ export async function runPersistedWorkflow(params: {
       });
       continue;
     }
-    if (!toolName || !params.agent.enabledTools.includes(toolName)) {
-      const error = toolName
-        ? `${node.name} could not run because ${toolName} is not enabled for this agent.`
-        : `${node.name} has no executable tool.`;
+    if (!toolName) {
+      await params.activity.logRunStep({
+        runId: params.runId,
+        key: `workflow.${node.id}.skipped`,
+        label: `${node.name} skipped`,
+        detail: "This step has no executable tool, so Wave continued to the result.",
+      });
+      continue;
+    }
+    if (!params.agent.enabledTools.includes(toolName)) {
+      const error = `${node.name} could not run because ${toolName} is not enabled for this agent.`;
       await params.activity.finishRun({
         runId: params.runId,
         status: "failed",
@@ -215,6 +365,23 @@ export async function runPersistedWorkflow(params: {
         steps: params.activity.getSteps(),
       };
     }
+    if (isDeliveryTool(toolName) && !summary.trim()) {
+      const step = await completeAiWorkflowStep({
+        task: params.task,
+        agent: params.agent.record,
+        lastToolName,
+        lastToolOutput,
+        existingSummary: summary,
+        sourceImage: params.sourceImage,
+      });
+      summary = step.summary;
+      if (step.conceptImages.length) conceptImages = step.conceptImages;
+      generationError = step.generationError;
+      generationProvider = step.generationProvider;
+      generationModel = step.generationModel;
+      generationErrorKind = step.generationErrorKind;
+      generationRetryable = step.generationRetryable;
+    }
 
     const toolInput = toolInputForNode({
       node,
@@ -228,7 +395,9 @@ export async function runPersistedWorkflow(params: {
           ? "WhatsApp is required for this agent, but no WhatsApp provider is connected."
           : toolInput?.missing === "whatsapp"
             ? "WhatsApp is required for this agent, but no recipient is configured."
-            : "Email is required for this agent, but no recipient is configured.";
+            : toolInput?.missing === "source_url"
+              ? "This agent needs a public link (YouTube, article, or other page) before it can run. Wave will not invent a summary."
+              : "Email is required for this agent, but no recipient is configured.";
       await params.activity.finishRun({
         runId: params.runId,
         status: "failed",
@@ -317,7 +486,8 @@ export async function runPersistedWorkflow(params: {
       toolName === "web_search" ||
       toolName === "x_search" ||
       toolName === "google_sheets" ||
-      toolName === "read_document"
+      toolName === "read_document" ||
+      toolName === "fetch_url"
     ) {
       summary = await summarizeToolResultsForTask({
         task: params.task,
@@ -332,23 +502,21 @@ export async function runPersistedWorkflow(params: {
   }
 
   if (!summary.trim()) {
-    await params.activity.finishRun({
-      runId: params.runId,
-      status: "failed",
-      summary: null,
-      errorMessage: "The workflow finished without producing a result.",
+    const step = await completeAiWorkflowStep({
+      task: params.task,
+      agent: params.agent.record,
+      lastToolName,
+      lastToolOutput,
+      existingSummary: summary,
+      sourceImage: params.sourceImage,
     });
-    return {
-      runId: params.runId,
-      status: "failed",
-      summary: null,
-      error: "The workflow finished without producing a result.",
-      proposalId: null,
-      toolCalls,
-      turns,
-      steps: params.activity.getSteps(),
-      analysis,
-    };
+    summary = step.summary;
+    if (step.conceptImages.length) conceptImages = step.conceptImages;
+    generationError = step.generationError;
+    generationProvider = step.generationProvider;
+    generationModel = step.generationModel;
+    generationErrorKind = step.generationErrorKind;
+    generationRetryable = step.generationRetryable;
   }
 
   await params.activity.finishRun({
@@ -368,6 +536,12 @@ export async function runPersistedWorkflow(params: {
     turns,
     steps: params.activity.getSteps(),
     analysis,
+    conceptImages,
+    generationError,
+    generationProvider,
+    generationModel,
+    generationErrorKind,
+    generationRetryable,
     delivery:
       deliveredEmail || deliveredWhatsApp
         ? {

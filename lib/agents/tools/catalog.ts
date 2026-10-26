@@ -1,6 +1,7 @@
 import { handleSendEmail } from "../runtime/tools/handlers/send-email";
 import type { ZeltaToolDefinition } from "./types";
 import { handleGoogleSheets } from "./handlers/google-sheets";
+import { handleFetchUrl } from "./handlers/fetch-url";
 import { handleHttpRequest } from "./handlers/http-request";
 import { handleQuerySupabase } from "./handlers/query-supabase";
 import { handleReadDocument } from "./handlers/read-document";
@@ -65,6 +66,23 @@ export const ZELTA_TOOL_CATALOG: ZeltaToolDefinition[] = [
     },
     outputSchema: OBJECT_OUTPUT,
     handler: handleHttpRequest,
+  },
+  {
+    name: "fetch_url",
+    label: "Read link",
+    description: "Fetch a public web page or video page and extract the real title, description, and text. Does not invent content.",
+    actionType: "research.fetch_url",
+    riskLevel: "low",
+    permissions: [{ provider: "none", label: "Built-in", description: "No credentials required." }],
+    inputSchema: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "Public http(s) URL to read" },
+      },
+      required: ["url"],
+    },
+    outputSchema: OBJECT_OUTPUT,
+    handler: handleFetchUrl,
   },
   {
     name: "send_email",
@@ -162,7 +180,8 @@ export const ZELTA_TOOL_CATALOG: ZeltaToolDefinition[] = [
   {
     name: "read_document",
     label: "Read document",
-    description: "Read a file you uploaded to Wave.",
+    description:
+      "Read a file you uploaded to Wave. Omit uploadId to use this agent's CSV or your latest upload.",
     actionType: "data.document_read",
     riskLevel: "low",
     permissions: [{ provider: "none", label: "Built-in", description: "Uses Supabase storage log-uploads bucket." }],
@@ -304,6 +323,209 @@ export const ZELTA_TOOL_CATALOG: ZeltaToolDefinition[] = [
     },
     outputSchema: OBJECT_OUTPUT,
     handler: (input) => handleUnconfiguredTool("create_calendar_event", input),
+  },
+  {
+    name: "create_service_quote",
+    label: "Service quote",
+    description: "Create an estimated lighting quote from configured provider rates.",
+    actionType: "service.quote",
+    riskLevel: "medium",
+    permissions: [{ provider: "none", label: "Built-in", description: "Uses the agent's configured rate table." }],
+    inputSchema: {
+      type: "object",
+      properties: {
+        amount: { type: "number", description: "Quote total in paise" },
+        currency: { type: "string" },
+      },
+      required: ["amount"],
+    },
+    outputSchema: OBJECT_OUTPUT,
+    handler: (input) => handleUnconfiguredTool("create_service_quote", input),
+  },
+  {
+    name: "verify_service_address",
+    label: "Verify service address",
+    description: "Request a human reviewer to verify a service address. WAVE has no live address provider.",
+    actionType: "service.address_verify",
+    riskLevel: "medium",
+    permissions: [{ provider: "none", label: "Manual review", description: "Address verification is a human workflow." }],
+    inputSchema: {
+      type: "object",
+      properties: {
+        address: { type: "string" },
+      },
+      required: ["address"],
+    },
+    outputSchema: OBJECT_OUTPUT,
+    handler: (input) => handleUnconfiguredTool("verify_service_address", input),
+  },
+  {
+    name: "request_electrician_visit",
+    label: "Electrician visit request",
+    description: "Create a pending electrician visit request. Does not confirm a calendar slot.",
+    actionType: "service.appointment_request",
+    riskLevel: "medium",
+    permissions: [
+      {
+        provider: "none",
+        label: "Scheduling",
+        description: "No live electrician calendar is connected.",
+        settingsPath: "/settings?tab=integrations",
+      },
+    ],
+    inputSchema: {
+      type: "object",
+      properties: {
+        preferredAppointmentAt: { type: "string" },
+      },
+    },
+    outputSchema: OBJECT_OUTPUT,
+    handler: (input) => handleUnconfiguredTool("request_electrician_visit", input),
+  },
+  {
+    name: "plan_travel_itinerary",
+    label: "Plan travel itinerary",
+    description: "Build a day-by-day local itinerary from traveler preferences and optional Qloo taste data.",
+    actionType: "travel.itinerary",
+    riskLevel: "low",
+    permissions: [
+      {
+        provider: "none",
+        label: "Qloo taste (optional)",
+        description: "Uses QLOO_API_KEY when set. Falls back to stated preferences if Qloo is unavailable.",
+        envVarsAny: ["QLOO_API_KEY"],
+        settingsPath: "/settings?tab=integrations",
+      },
+    ],
+    inputSchema: {
+      type: "object",
+      properties: {
+        destination: { type: "string" },
+        startDate: { type: "string" },
+        endDate: { type: "string" },
+      },
+      required: ["destination", "startDate", "endDate"],
+    },
+    outputSchema: OBJECT_OUTPUT,
+    handler: (input) => handleUnconfiguredTool("plan_travel_itinerary", input),
+  },
+  {
+    name: "request_travel_booking",
+    label: "Travel booking request",
+    description: "Create a pending booking request. Does not purchase tickets or reserve tables.",
+    actionType: "travel.booking_request",
+    riskLevel: "medium",
+    permissions: [
+      {
+        provider: "none",
+        label: "Booking request",
+        description: "No reservation or ticket provider is connected. WAVE stores a pending request only.",
+        settingsPath: "/settings?tab=integrations",
+      },
+    ],
+    inputSchema: {
+      type: "object",
+      properties: {
+        activityId: { type: "string" },
+        partySize: { type: "number" },
+      },
+      required: ["activityId"],
+    },
+    outputSchema: OBJECT_OUTPUT,
+    handler: (input) => handleUnconfiguredTool("request_travel_booking", input),
+  },
+  {
+    name: "plan_wedding_event",
+    label: "Plan wedding event",
+    description: "Build a wedding or celebration plan from stated preferences. Does not use Qloo.",
+    actionType: "wedding.plan",
+    riskLevel: "low",
+    permissions: [{ provider: "none", label: "Built-in", description: "Uses organizer-entered preferences only." }],
+    inputSchema: {
+      type: "object",
+      properties: {
+        eventName: { type: "string" },
+        startDate: { type: "string" },
+      },
+      required: ["eventName"],
+    },
+    outputSchema: OBJECT_OUTPUT,
+    handler: (input) => handleUnconfiguredTool("plan_wedding_event", input),
+  },
+  {
+    name: "request_wedding_deposit",
+    label: "Wedding deposit request",
+    description: "Create a pending vendor deposit request. Does not send money.",
+    actionType: "wedding.deposit",
+    riskLevel: "medium",
+    permissions: [
+      {
+        provider: "none",
+        label: "Deposit request",
+        description: "No vendor payout provider is connected.",
+        settingsPath: "/settings?tab=integrations",
+      },
+    ],
+    inputSchema: {
+      type: "object",
+      properties: {
+        vendorId: { type: "string" },
+        amount: { type: "number" },
+      },
+      required: ["vendorId", "amount"],
+    },
+    outputSchema: OBJECT_OUTPUT,
+    handler: (input) => handleUnconfiguredTool("request_wedding_deposit", input),
+  },
+  {
+    name: "plan_group_outing",
+    label: "Plan group outing",
+    description: "Build fairness-aware restaurant recommendations from individual tastes and optional Qloo place insights.",
+    actionType: "group.plan",
+    riskLevel: "low",
+    permissions: [
+      {
+        provider: "none",
+        label: "Qloo taste (optional)",
+        description: "Uses QLOO_API_KEY when set. Falls back to labelled preference matching if Qloo is unavailable.",
+        envVarsAny: ["QLOO_API_KEY"],
+        settingsPath: "/settings?tab=integrations",
+      },
+    ],
+    inputSchema: {
+      type: "object",
+      properties: {
+        city: { type: "string" },
+        outingDate: { type: "string" },
+      },
+      required: ["city"],
+    },
+    outputSchema: OBJECT_OUTPUT,
+    handler: (input) => handleUnconfiguredTool("plan_group_outing", input),
+  },
+  {
+    name: "request_group_reservation",
+    label: "Group reservation request",
+    description: "Create a pending restaurant reservation request. Does not confirm a table.",
+    actionType: "group.reservation",
+    riskLevel: "medium",
+    permissions: [
+      {
+        provider: "none",
+        label: "Reservation request",
+        description: "No restaurant booking provider is connected.",
+        settingsPath: "/settings?tab=integrations",
+      },
+    ],
+    inputSchema: {
+      type: "object",
+      properties: {
+        outingId: { type: "string" },
+      },
+      required: ["outingId"],
+    },
+    outputSchema: OBJECT_OUTPUT,
+    handler: (input) => handleUnconfiguredTool("request_group_reservation", input),
   },
 ];
 

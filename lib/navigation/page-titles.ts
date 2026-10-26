@@ -16,6 +16,7 @@ export function getPageTitle(pathname: string): string {
   if (pathname.startsWith("/decision-agents/create")) return "Multiple Decision Agents";
   if (pathname.startsWith("/decision-agents/templates")) return "Multiple Decision Agents";
   if (pathname.startsWith("/decision-agents/") && pathname.includes("/test")) return "Test decision agent";
+  if (pathname.startsWith("/decision-agents/results")) return "Research report";
   if (pathname.startsWith("/decision-agents")) return "Multiple Decision Agents";
   if (pathname.startsWith("/monitor")) return "Monitor";
   if (pathname.startsWith("/integrations")) return "My Agents";
@@ -26,6 +27,12 @@ export function getPageTitle(pathname: string): string {
   if (pathname.startsWith("/agents/") && pathname.includes("/ready")) return "Agent ready";
   if (pathname.startsWith("/agents/") && pathname.includes("/workflow")) return "Agent workflow";
   if (pathname.startsWith("/agents/") && pathname.includes("/setup")) return "Agent setup";
+  if (pathname.startsWith("/agents/") && pathname.includes("/lighting")) return "Lighting Concierge";
+  if (pathname.startsWith("/agents/") && pathname.includes("/travel")) return "Travel Companion";
+  if (pathname.startsWith("/agents/") && pathname.includes("/wedding")) return "Wedding & Celebration Planner";
+  if (pathname.startsWith("/agents/") && pathname.includes("/group")) return "Group Decision Planner";
+  if (pathname.startsWith("/agents/") && pathname.includes("/run")) return "Run agent";
+  if (pathname.startsWith("/agents/") && pathname.includes("/result")) return "Summary";
   if (pathname.startsWith("/agents/") && pathname.includes("/test")) return "Test agent";
   if (pathname.startsWith("/agents/") && pathname.includes("/safety")) return "Safety Autopilot";
   if (pathname.startsWith("/dashboard/agents/") && pathname.includes("/safety")) return "Safety Autopilot";

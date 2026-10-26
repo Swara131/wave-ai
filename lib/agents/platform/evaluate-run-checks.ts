@@ -139,6 +139,20 @@ export function evaluateOutputCheck(params: {
     };
   }
 
+  if (
+    /\bTCK-\d+/i.test(params.summary) &&
+    (!analysis || analysis.empty || analysis.analyzedCount === 0)
+  ) {
+    return {
+      id: "output",
+      label: "Output",
+      status: "fail",
+      message:
+        "The result listed ticket IDs that were not retrieved from a connected source. Wave does not accept invented tickets.",
+      checkedAt: now,
+    };
+  }
+
   if (isPromptEcho(params.summary, params.task)) {
     return {
       id: "output",
@@ -165,6 +179,16 @@ export function evaluateOutputCheck(params: {
       label: "Output",
       status: "needs_attention",
       message: "Runtime reported that no records were analyzed.",
+      checkedAt: now,
+    };
+  }
+
+  if (/could not analyze it|could not analyze the uploaded photo/i.test(params.summary)) {
+    return {
+      id: "output",
+      label: "Output",
+      status: "fail",
+      message: "The photo was received but Wave could not analyze it.",
       checkedAt: now,
     };
   }

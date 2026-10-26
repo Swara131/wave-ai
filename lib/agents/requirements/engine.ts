@@ -56,8 +56,8 @@ function applyJobDefaults(
     }
     if (!next.meeting_timezone) next.meeting_timezone = timezone || "Asia/Kolkata";
   }
-  if (profile === "news_digest") {
-    if (!next.story_count) next.story_count = "5";
+  if (profile === "news_digest" || profile === "url_summary") {
+    if (!next.story_count && profile === "news_digest") next.story_count = "5";
     if (!next.summary_length) next.summary_length = "standard";
   }
   if (profile === "sales_briefing") {
@@ -117,18 +117,38 @@ export function getAgentRequirements(snapshot: AgentRequirementSnapshot): AgentR
   const jobHints = extractWorkflowJobHints(snapshot.workflow);
   const jobProfile = inferJobProfile(textBlob(snapshot), jobHints);
   const tools = unique([...(snapshot.tools ?? []), ...workflow.tools]);
-  const delivery = snapshot.deliveryMode ?? "notification";
   const rawAnswers = answersOf(snapshot);
   const answers = applyJobDefaults(jobProfile, rawAnswers, tools, snapshot.timezone);
   const choices = snapshot.requirementChoices ?? answers;
+  const isLightingConcierge =
+    jobProfile === "lighting_concierge" ||
+    Boolean(snapshot.source?.includes("lighting-concierge")) ||
+    snapshot.agentId === "lighting-concierge";
+  const isTravelCompanion =
+    jobProfile === "travel_companion" ||
+    Boolean(snapshot.source?.includes("travel-companion")) ||
+    snapshot.agentId === "travel-companion";
+  const isWeddingPlanner =
+    jobProfile === "wedding_planner" ||
+    Boolean(snapshot.source?.includes("wedding-celebration-planner")) ||
+    snapshot.agentId === "wedding-celebration-planner";
+  const isGroupPlanner =
+    jobProfile === "group_decision_planner" ||
+    Boolean(snapshot.source?.includes("group-decision-planner")) ||
+    snapshot.agentId === "group-decision-planner";
+  const explicitEmail =
+    choices.output === "email" || ans(answers, "output_destination") === "email";
+  const delivery =
+    snapshot.deliveryMode === "email" && !explicitEmail && !snapshot.destinationEmail
+      ? "notification"
+      : snapshot.deliveryMode ?? "notification";
 
   const needsEmail =
-    tools.includes("send_email") ||
-    workflow.hasEmailOutput ||
-    intent.wantsEmail ||
-    delivery === "email" ||
-    delivery === "both" ||
-    choices.output === "email";
+    !isLightingConcierge &&
+    !isTravelCompanion &&
+    !isWeddingPlanner &&
+    !isGroupPlanner &&
+    (delivery === "email" || delivery === "both" || explicitEmail);
 
   const needsWhatsApp =
     tools.includes("send_whatsapp_message") ||
@@ -166,26 +186,7 @@ export function getAgentRequirements(snapshot: AgentRequirementSnapshot): AgentR
     hasHighImpact(tools) ||
     (needsDecision && /\brefund|payment|delete\b/i.test(textBlob(snapshot)));
 
-  const outputChosen =
-    needsEmail ||
-    needsWhatsApp ||
-    needsSlack ||
-    choices.output === "notification" ||
-    choices.output === "other" ||
-    delivery === "notification" && intent.outputChannelSpecified;
-
-  const needsOutputClarification =
-    snapshot.kind === "builder" &&
-    intent.wantsOutput &&
-    !intent.outputChannelSpecified &&
-    !tools.includes("send_email") &&
-    !tools.includes("send_whatsapp_message") &&
-    !workflow.hasEmailOutput &&
-    delivery !== "email" &&
-    delivery !== "whatsapp" &&
-    delivery !== "both" &&
-    !choices.output &&
-    !ans(answers, "output_destination");
+  const needsOutputClarification = false;
 
   const needsCustomerSource = /\bpersonalized emails? to my customers\b/i.test(textBlob(snapshot));
 
@@ -203,6 +204,7 @@ export function getAgentRequirements(snapshot: AgentRequirementSnapshot): AgentR
       options: item.options,
       kind: item.kind ?? "capability",
       countsTowardProgress: item.countsTowardProgress,
+      scope: item.scope,
     });
   };
 
@@ -494,7 +496,9 @@ export function getAgentRequirements(snapshot: AgentRequirementSnapshot): AgentR
         reason: "This agent needs records from a source you control. It will not insert fake tickets.",
         configurationType: "connection",
         value: snapshot.safetySettings?.dataSource?.kind ?? null,
-        actionHref: snapshot.agentId ? `/agents/${encodeURIComponent(snapshot.agentId)}/prepare` : undefined,
+        actionHref: snapshot.agentId
+          ? `/agents/${encodeURIComponent(snapshot.agentId)}/prepare`
+          : undefined,
         action: "Configure data source",
         section: "input",
         sectionTitle: "Data source",
@@ -572,21 +576,19 @@ export function getAgentRequirements(snapshot: AgentRequirementSnapshot): AgentR
       });
     } else if (!needsEmail && !needsWhatsApp && !needsSlack) {
       push({
-        key: "output",
+        key: "wave_notify",
         category: "output",
-        label: "Result",
-        description: "The agent will produce a result you can review in Wave.",
+        label: "Wave notify",
+        description: "Results stay in Wave notifications. No email recipient is needed.",
         required: true,
         status: "ready",
-        reason: outputChosen
-          ? "Delivery is configured for this agent."
-          : "Results stay in Wave until you add another destination.",
+        reason: "Results appear in Wave notify. No email recipient is needed.",
         configurationType: "none",
         countsTowardProgress: false,
         kind: "configuration",
         section: "delivery",
         sectionTitle: "How should the result be delivered?",
-        sectionDescription: "Results stay in Wave unless you choose another channel.",
+        sectionDescription: "WAVE delivers through Wave notify unless you later connect another channel.",
       });
     }
 
@@ -609,6 +611,128 @@ export function getAgentRequirements(snapshot: AgentRequirementSnapshot): AgentR
           { id: "api", label: "API" },
         ],
         kind: "configuration",
+      });
+    }
+
+    if (isTravelCompanion) {
+      push({
+        key: "travel_intake",
+        category: "input",
+        label: "Traveler intake",
+        description: "Collect destination, dates, budget, and interests before planning a trip.",
+        required: true,
+        status: "missing",
+        reason: "This agent needs trip preferences each time it runs.",
+        configurationType: "text",
+        value: null,
+        kind: "business",
+        section: "run_input",
+        sectionTitle: "Trip details",
+        sectionDescription: "Open Travel Companion to collect preferences and generate an itinerary.",
+        countsTowardProgress: false,
+        scope: "run",
+      });
+    }
+
+    if (isWeddingPlanner) {
+      push({
+        key: "wedding_intake",
+        category: "input",
+        label: "Wedding intake",
+        description: "Collect event details and stated preferences before planning.",
+        required: true,
+        status: "missing",
+        reason: "This agent needs event preferences each time it runs.",
+        configurationType: "text",
+        value: null,
+        kind: "business",
+        section: "run_input",
+        sectionTitle: "Event details",
+        sectionDescription: "Open Wedding & Celebration Planner to collect preferences and generate a plan.",
+        countsTowardProgress: false,
+        scope: "run",
+      });
+    }
+
+    if (isGroupPlanner) {
+      push({
+        key: "group_intake",
+        category: "input",
+        label: "Group outing intake",
+        description: "Collect participant tastes, city, budget, and timing before ranking restaurants.",
+        required: true,
+        status: "missing",
+        reason: "This agent needs individual profiles each time it runs.",
+        configurationType: "text",
+        value: null,
+        kind: "business",
+        section: "run_input",
+        sectionTitle: "Group details",
+        sectionDescription: "Open Group Decision Planner to collect profiles and discover restaurants.",
+        countsTowardProgress: false,
+        scope: "run",
+      });
+    }
+
+    if (jobProfile === "lighting_concierge") {
+      push({
+        key: "lighting_intake",
+        category: "input",
+        label: "Customer lighting intake",
+        description: "Collect room, budget, and service address before generating a plan.",
+        required: true,
+        status: "missing",
+        reason: "This agent needs a customer intake each time it runs.",
+        configurationType: "text",
+        value: null,
+        kind: "business",
+        section: "run_input",
+        sectionTitle: "Customer lighting details",
+        sectionDescription: "Open Lighting Concierge to collect the intake and generate a plan.",
+        countsTowardProgress: false,
+        scope: "run",
+      });
+    }
+
+    if (jobProfile === "photo_concepts") {
+      push({
+        key: "venue_photo",
+        category: "input",
+        label: "Venue photo",
+        description: "Upload a real photo of the space. Wave will not invent a venue or prices.",
+        required: true,
+        status: ready(Boolean(ans(answers, "venue_photo"))),
+        reason: "This agent needs a photo each time it runs.",
+        configurationType: "file",
+        value: ans(answers, "venue_photo") || null,
+        kind: "business",
+        section: "run_input",
+        sectionTitle: "Upload the venue photo",
+        sectionDescription: "Choose a JPEG, PNG, or WebP of the actual space.",
+        countsTowardProgress: false,
+        scope: "run",
+      });
+    }
+
+    if (jobProfile === "generic" && /\bsummar/.test(textBlob(snapshot)) && !/\b(tickets?|crm|refund|fraud)\b/i.test(textBlob(snapshot))) {
+      push({
+        key: "source_url",
+        category: "input",
+        label: "Link to summarize",
+        description: "Paste a YouTube, article, or other public URL. Wave will not invent a summary.",
+        required: true,
+        status: ready(Boolean(ans(answers, "source_url"))),
+        reason: "This agent needs a real link each time it runs.",
+        configurationType: "url",
+        value: ans(answers, "source_url") || null,
+        placeholder: "https://www.youtube.com/watch?v=…",
+        validation: "url",
+        kind: "business",
+        section: "run_input",
+        sectionTitle: "What should this run summarize?",
+        sectionDescription: "Paste a public link. Wave fetches it and summarizes only what it can actually read.",
+        countsTowardProgress: false,
+        scope: "run",
       });
     }
 
@@ -656,7 +780,8 @@ export function getAgentRequirements(snapshot: AgentRequirementSnapshot): AgentR
         sectionTitle: spec.sectionTitle,
         sectionDescription: spec.sectionDescription,
         dependsOn: spec.dependsOn,
-        countsTowardProgress: required && !autoConfigured,
+        countsTowardProgress: required && !autoConfigured && spec.scope !== "run",
+        scope: spec.scope,
       });
     }
 
@@ -831,7 +956,8 @@ export function getAgentRequirements(snapshot: AgentRequirementSnapshot): AgentR
   }
 
   const required = requirements.filter((item) => item.required);
-  const missing = required.filter((item) => item.status === "missing");
+  const missing = required.filter((item) => item.status === "missing" && item.scope !== "run");
+  const runMissing = required.filter((item) => item.status === "missing" && item.scope === "run");
   const progress = requirements.filter(countsTowardProgress);
   const progressReady = progress.filter((item) => item.status === "ready");
 
@@ -845,7 +971,9 @@ export function getAgentRequirements(snapshot: AgentRequirementSnapshot): AgentR
     readyCount: progressReady.length,
     requiredCount: progress.length,
     missing,
+    runMissing,
     ready: missing.length === 0,
+    runReady: runMissing.length === 0,
   };
 }
 

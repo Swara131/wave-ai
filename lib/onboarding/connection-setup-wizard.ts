@@ -177,10 +177,11 @@ function buildNodeSegments(agent: string, key: string, base: string): CodeSnippe
 
 async function proposeAction(toolName, payload) {
   const response = await axios.post(
-    '${base}/v1/actions/propose',
+    '${base}/api/v1/actions/propose',
     {
       agentId: '${agent}',
       toolName: toolName,
+      actionType: toolName,
       payload: payload
     },
     {
@@ -208,7 +209,7 @@ import requests
 
 def propose_action(tool_name: str, payload: dict):
     response = requests.post(
-        "${base}/v1/actions/propose",
+        "${base}/api/v1/actions/propose",
         headers={
             "Authorization": f"Bearer {os.environ['ZELTA_API_KEY']}",
             "Content-Type": "application/json",
@@ -216,6 +217,7 @@ def propose_action(tool_name: str, payload: dict):
         json={
             "agentId": "${agent}",
             "toolName": tool_name,
+            "actionType": tool_name,
             "payload": payload,
         },
         timeout=30,
@@ -233,12 +235,13 @@ def propose_action(tool_name: str, payload: dict):
 }
 
 function buildCustomHttpSegments(agent: string, key: string, base: string): CodeSnippetSegment[] {
-  const code = `curl -X POST "${base}/v1/actions/propose" \\
+  const code = `curl -X POST "${base}/api/v1/actions/propose" \\
   -H "Authorization: Bearer $ZELTA_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "agentId": "${agent}",
     "toolName": "send_email",
+    "actionType": "send_email",
     "payload": {
       "to": "customer@example.com",
       "subject": "Order update"
@@ -258,9 +261,9 @@ AGENT_ID = "${agent}"
 
 def zelta_gate(tool_name: str, payload: dict) -> dict:
     r = requests.post(
-        f"{ZELTA_BASE}/v1/actions/propose",
+        f"{ZELTA_BASE}/api/v1/actions/propose",
         headers={"Authorization": f"Bearer {ZELTA_KEY}"},
-        json={"agentId": AGENT_ID, "toolName": tool_name, "payload": payload},
+        json={"agentId": AGENT_ID, "toolName": tool_name, "actionType": tool_name, "payload": payload},
         timeout=30,
     )
     r.raise_for_status()

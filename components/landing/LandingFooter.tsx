@@ -22,7 +22,7 @@ export default function LandingFooter() {
               <Link href="#product">Product</Link>
             </li>
             <li>
-              <Link href="/dashboard/templates">Templates</Link>
+              <Link href="#templates">Templates</Link>
             </li>
             <li>
               <Link href="#safety">Safety</Link>

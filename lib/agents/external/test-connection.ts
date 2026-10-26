@@ -91,15 +91,6 @@ async function testHttpEndpoint(params: {
       body,
     });
 
-    checks.push(
-      check(
-        "connection",
-        "Connection",
-        "pass",
-        `Reached ${parsed.host} (${response.status}).`
-      )
-    );
-
     const contentType = response.headers.get("content-type") ?? "";
     let responseText = "";
     try {
@@ -109,36 +100,74 @@ async function testHttpEndpoint(params: {
     }
 
     const hasBody = responseText.trim().length > 0;
+    const authFailed = response.status === 401 || response.status === 403;
+
+    if (!response.ok) {
+      checks.push(
+        check(
+          "connection",
+          "Connection",
+          "fail",
+          authFailed
+            ? `Authentication failed (HTTP ${response.status}).`
+            : `Handshake failed (HTTP ${response.status} ${response.statusText || "Request failed"}).`
+        )
+      );
+      checks.push(
+        check(
+          "response",
+          "Agent response",
+          "fail",
+          hasBody
+            ? `HTTP ${response.status}: ${responseText.slice(0, 120)}`
+            : `HTTP ${response.status}: ${response.statusText || "Request failed"}.`
+        )
+      );
+      checks.push(
+        check("execution", "Execution", "fail", "The endpoint did not accept the test request.")
+      );
+      checks.push(
+        check(
+          "output",
+          "Output",
+          hasBody ? "fail" : "fail",
+          hasBody
+            ? `Sample: ${responseText.slice(0, 120)}${responseText.length > 120 ? "…" : ""}`
+            : contentType
+              ? `Content-Type: ${contentType}`
+              : "No output returned."
+        )
+      );
+      return checks;
+    }
+
+    checks.push(
+      check(
+        "connection",
+        "Connection",
+        "pass",
+        `Reached ${parsed.host} (${response.status}).`
+      )
+    );
+
     checks.push(
       check(
         "response",
         "Agent response",
-        response.ok || hasBody ? "pass" : "fail",
-        response.ok
-          ? hasBody
-            ? "Agent returned a response body."
-            : "Endpoint responded with no body."
-          : `HTTP ${response.status}: ${response.statusText || "Request failed"}.`
+        "pass",
+        hasBody ? "Agent returned a response body." : "Endpoint responded with no body."
       )
     );
 
     checks.push(
-      check(
-        "execution",
-        "Execution",
-        response.ok ? "pass" : "fail",
-        response.ok
-          ? "Endpoint accepted the test request."
-          : "The endpoint did not return a successful status."
-      )
+      check("execution", "Execution", "pass", "Endpoint accepted the test request.")
     );
 
-    const outputOk = hasBody || response.ok;
     checks.push(
       check(
         "output",
         "Output",
-        outputOk ? "pass" : "fail",
+        "pass",
         hasBody
           ? `Sample: ${responseText.slice(0, 120)}${responseText.length > 120 ? "…" : ""}`
           : contentType

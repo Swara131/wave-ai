@@ -89,6 +89,18 @@ export default function TemplatePreviewModal({
               <li key={task}>{task}</li>
             ))}
           </ul>
+          {template.slug === "travel-companion" ? (
+            <p>
+              Try Example sample data (labelled sample, not a live booking): Jaipur, 10–12 Nov 2026, 2 travelers,
+              ₹18,000, food + history + art, balanced pace, Old City.
+            </p>
+          ) : null}
+          {template.slug === "wedding-celebration-planner" ? (
+            <p>
+              Try Example sample data (labelled sample, not a live vendor): Ananya &amp; Rohan, Jaipur, 12 Dec 2026,
+              180 guests, ₹8,50,000, garden venue, vegetarian food. WAVE does not use Qloo for this template.
+            </p>
+          ) : null}
         </section>
         {scenario ? (
           <section>

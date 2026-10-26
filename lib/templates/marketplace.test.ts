@@ -13,11 +13,46 @@ import { toTemplateRow } from "./seed-rows";
 import type { BuilderAgentRecord } from "@/lib/agents/runtime-types";
 
 describe("marketplace catalog", () => {
-  it("seeds exactly 50 published templates with unique slugs", () => {
-    assert.equal(MARKETPLACE_TEMPLATES.length, 50);
+  it("seeds published templates with unique slugs including Lighting Concierge", () => {
+    assert.equal(MARKETPLACE_TEMPLATES.length, 54);
     const slugs = MARKETPLACE_TEMPLATES.map((template) => template.slug ?? template.id);
-    assert.equal(new Set(slugs).size, 50);
+    assert.equal(new Set(slugs).size, 54);
+    assert.ok(MARKETPLACE_TEMPLATES.some((template) => template.slug === "lighting-concierge"));
+    assert.ok(MARKETPLACE_TEMPLATES.some((template) => template.slug === "travel-companion"));
+    assert.ok(MARKETPLACE_TEMPLATES.some((template) => template.slug === "wedding-celebration-planner"));
+    assert.ok(MARKETPLACE_TEMPLATES.some((template) => template.slug === "group-decision-planner"));
     assert.ok(MARKETPLACE_TEMPLATES.every((template) => template.isPublished !== false));
+    assert.equal(
+      MARKETPLACE_TEMPLATES.find((template) => template.slug === "lighting-concierge")?.category,
+      "home-services"
+    );
+    const lighting = MARKETPLACE_TEMPLATES.find((template) => template.slug === "lighting-concierge");
+    assert.ok(lighting);
+    assert.equal(lighting.tools.includes("send_email"), false);
+    assert.ok(lighting.suggestedIntegrations?.includes("Wave notify"));
+    const lightingSafety = buildSafetySettingsFromTemplate(lighting, { needsApproval: false });
+    assert.ok(lightingSafety.mission?.allowedTools?.includes("create_service_quote"));
+    assert.equal(lightingSafety.thresholdInr, 5000);
+    const travel = MARKETPLACE_TEMPLATES.find((template) => template.slug === "travel-companion");
+    assert.ok(travel);
+    assert.equal(travel.category, "travel-lifestyle");
+    const travelSafety = buildSafetySettingsFromTemplate(travel, { needsApproval: false });
+    assert.ok(travelSafety.mission?.allowedTools?.includes("plan_travel_itinerary"));
+    assert.equal(travelSafety.thresholdInr, 5000);
+    const wedding = MARKETPLACE_TEMPLATES.find((template) => template.slug === "wedding-celebration-planner");
+    assert.ok(wedding);
+    assert.equal(wedding.category, "events-planning");
+    assert.equal(wedding.tools.includes("send_email"), false);
+    const weddingSafety = buildSafetySettingsFromTemplate(wedding, { needsApproval: false });
+    assert.ok(weddingSafety.mission?.allowedTools?.includes("plan_wedding_event"));
+    assert.equal(weddingSafety.thresholdInr, 10000);
+    assert.equal(weddingSafety.weddingPlanner?.depositThresholdInr, 10000);
+    const group = MARKETPLACE_TEMPLATES.find((template) => template.slug === "group-decision-planner");
+    assert.ok(group);
+    assert.equal(group.category, "travel-lifestyle");
+    const groupSafety = buildSafetySettingsFromTemplate(group, { needsApproval: false });
+    assert.ok(groupSafety.mission?.allowedTools?.includes("plan_group_outing"));
+    assert.equal(groupSafety.thresholdInr, 5000);
   });
 
   it("upsert rows are idempotent by id/slug", () => {

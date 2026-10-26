@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ClipboardCheck } from "lucide-react";
 import PageShell from "@/components/ui/PageShell";
 import PageHeader from "@/components/ui/PageHeader";
@@ -30,6 +30,7 @@ import {
 } from "@/lib/approvals/proposal-deep-link";
 import { buildMonthlyProtectionSummary } from "@/lib/dashboard/trust-empty-states";
 import { FLOW_ERRORS } from "@/lib/ux/flow-copy";
+import { continueHrefAfterApproval } from "@/lib/approvals/continue-after-approval";
 
 type FilterKey = ProposalDeepLinkFilter;
 
@@ -64,6 +65,7 @@ async function fetchAuditEntries(): Promise<AuditTimelineEntry[]> {
 }
 
 export default function PendingApprovalsPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const deepLinkProposalId = parseProposalDeepLinkParam(searchParams.get("proposal"));
   const deepLinkAction = searchParams.get("action");
@@ -184,6 +186,8 @@ export default function PendingApprovalsPage() {
           error?: string;
           result?: {
             runtimeResume?: {
+              resumed?: boolean;
+              runId?: string | null;
               runStatus?: string;
               runSummary?: string | null;
             };
@@ -232,13 +236,20 @@ export default function PendingApprovalsPage() {
               : labels[action];
         showToast(message, action === "approved" ? "success" : "warning");
         void loadData();
+
+        if (action === "approved" && approval) {
+          const href = continueHrefAfterApproval(approval, {
+            resumed: Boolean(payload.result?.runtimeResume?.resumed && payload.result.runtimeResume.runId),
+          });
+          router.push(href);
+        }
       } catch (err) {
         showToast(err instanceof Error ? err.message : FLOW_ERRORS.saveApproval, "warning");
       } finally {
         setSavingApprovalId(null);
       }
     },
-    [approvals, loadData]
+    [approvals, loadData, router]
   );
 
   useEffect(() => {

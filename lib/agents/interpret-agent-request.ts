@@ -103,6 +103,9 @@ function inferDisplayName(text: string, slugName: string): string {
     return "Founder Engagement Agent";
   }
   if (/\brefund\b/.test(normalized)) return "Refund Assistant Agent";
+  if (/\b(youtube|youtu\.be)\b/.test(normalized)) {
+    return "YouTube Summary Agent";
+  }
   if (/\bnews\b/.test(normalized) && /\b(ai|artificial intelligence)\b/.test(normalized)) {
     return "AI News Agent";
   }
@@ -114,6 +117,9 @@ function refineGoal(text: string, fallbackGoal: string): string {
   const normalized = text.toLowerCase();
   if (/\b(x|twitter)\b/.test(normalized) && /\bfounder\b/.test(normalized)) {
     return "Finds relevant AI founder posts on X and prepares thoughtful replies every morning.";
+  }
+  if (/\b(youtube|youtu\.be)\b/.test(normalized)) {
+    return "Reads a YouTube or other public link you provide and summarizes only the content Wave can actually fetch.";
   }
   if (/\bnews\b/.test(normalized) && /\b(ai|artificial intelligence)\b/.test(normalized)) {
     return "Finds the latest AI news each morning and delivers a short summary.";

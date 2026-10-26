@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import type { WorkflowSafetyDiff, WorkflowValidationResult } from "@/lib/agents/workflow/types";
 import { summarizeValidation } from "@/lib/agents/workflow/validate-workflow";
@@ -18,6 +19,9 @@ interface WorkflowValidationBarProps {
   onDiscard: () => void;
   onPublish: () => void;
   onSafetyReview?: () => void;
+  publishLabel?: string;
+  publishDisabled?: boolean;
+  extraAction?: ReactNode;
 }
 
 export default function WorkflowValidationBar({
@@ -34,6 +38,9 @@ export default function WorkflowValidationBar({
   onDiscard,
   onPublish,
   onSafetyReview,
+  publishLabel,
+  publishDisabled,
+  extraAction,
 }: WorkflowValidationBarProps) {
   const summary = validation ? summarizeValidation(validation) : "Workflow not verified yet";
 
@@ -101,13 +108,14 @@ export default function WorkflowValidationBar({
         >
           {verifying ? "Verifying…" : "Verify Agent"}
         </button>
+        {extraAction}
         <button
           type="button"
           className="wfb-btn wfb-btn-primary"
-          disabled={!validation?.valid || publishing}
+          disabled={publishDisabled ?? (!validation?.valid || publishing)}
           onClick={onPublish}
         >
-          {publishing ? "Publishing…" : "Verify & Publish"}
+          {publishLabel ?? (publishing ? "Publishing…" : "Verify & Publish")}
         </button>
       </div>
     </footer>

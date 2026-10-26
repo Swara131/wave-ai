@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { generateWorkflowFromInterpretation } from "@/lib/agents/workflow/generate-from-interpretation";
 import { syncWorkflowToAgentConfig } from "@/lib/agents/workflow/sync-to-agent";
-import { agentHasPersistedWorkflow } from "./workflow-executor";
+import { agentHasPersistedWorkflow, toolInputForNode } from "./workflow-executor";
+import { isAiWorkflowNode } from "./workflow-ai-step";
 import type { AgentInterpretation } from "@/lib/agents/builder-types";
 import type { LoadedAgent } from "./types";
 
@@ -46,4 +47,33 @@ test("agentHasPersistedWorkflow is true when safety_settings stores a graph", ()
     },
   } as LoadedAgent;
   assert.equal(agentHasPersistedWorkflow(agent), true);
+});
+
+test("generated AI steps stay executable even if category is missing from storage", () => {
+  const graph = generateWorkflowFromInterpretation(interpretation);
+  const ai = graph.nodes.find((node) => node.type.startsWith("ai_"));
+  assert.ok(ai);
+  const stored = { ...ai, category: undefined as unknown as typeof ai.category };
+  assert.equal(isAiWorkflowNode(stored), true);
+});
+
+test("read_document workflow nodes ask for the latest file instead of dumping setup answers", () => {
+  const input = toolInputForNode({
+    node: {
+      id: "read-1",
+      type: "tool",
+      category: "tool",
+      name: "Read document",
+      description: "",
+      config: { toolName: "read_document" },
+      status: "valid",
+      position: 1,
+    },
+    agent: {
+      record: { setupAnswers: { company: "Acme" } },
+    } as unknown as LoadedAgent,
+    task: "Summarize the file",
+    summary: "",
+  });
+  assert.deepEqual(input, { documentId: "latest" });
 });

@@ -15,6 +15,12 @@ export const BUILDER_CAPABILITY_OPTIONS = [
     tools: ["http_request"],
   },
   {
+    id: "web_page",
+    label: "Read a link",
+    description: "Open a YouTube, article, or other public URL and summarize what is actually there",
+    tools: ["fetch_url"],
+  },
+  {
     id: "email",
     label: "Email",
     description: "Send email through your connected provider",
@@ -122,17 +128,30 @@ export function inferCapabilityIdsFromText(text: string): BuilderCapabilityId[] 
   const normalized = text.toLowerCase();
   const ids = new Set<BuilderCapabilityId>();
 
+  const urlJob =
+    /\b(youtube|youtu\.be|tiktok|instagram|vimeo|web\s*page|webpage|blog post|article|video|podcast)\b/.test(
+      normalized
+    ) ||
+    /\b(from (a |the )?(url|link)|paste (a |the )?link|platform link|video link|web link)\b/.test(
+      normalized
+    );
+
+  if (urlJob) {
+    ids.add("web_page");
+  }
+
   if (
+    !urlJob &&
     /\b(search the web|web search|google|look up online|find new|latest|headlines|morning summary|news every|ai news|research)\b/.test(
       normalized
     )
   ) {
     ids.add("web_search");
   }
-  if (/\bnews\b/.test(normalized)) {
+  if (!urlJob && /\bnews\b/.test(normalized)) {
     ids.add("web_search");
   }
-  if (/\b(http|api|webhook|rest)\b/.test(normalized)) {
+  if (/\b(http|api|webhook|rest)\b/.test(normalized) && !urlJob) {
     ids.add("http");
   }
   if (/\b(x|twitter|tweet|posts on x)\b/.test(normalized)) {

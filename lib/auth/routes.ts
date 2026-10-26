@@ -21,6 +21,7 @@ export const PROTECTED_ROUTES = [
   "/templates",
   "/decision-agents",
   "/monitor",
+  "/runs",
 ] as const;
 
 /** Auth pages — signed-in users are redirected to the dashboard. */

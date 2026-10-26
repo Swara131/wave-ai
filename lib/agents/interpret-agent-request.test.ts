@@ -30,6 +30,16 @@ describe("buildFallbackInterpretation", () => {
     assert.equal(result.displayName, "AI News Agent");
   });
 
+  it("uses fetch_url for YouTube summarizers instead of inventing content", () => {
+    const result = buildFallbackInterpretation(
+      "Create an agent that summarizes YouTube videos from a link I paste."
+    );
+    assert.equal(result.displayName, "YouTube Summary Agent");
+    assert.ok(result.capabilityIds.includes("web_page"));
+    assert.ok(result.tools.includes("fetch_url"));
+    assert.equal(result.tools.includes("query_supabase"), false);
+  });
+
   it("includes email capability for refund requests", () => {
     const result = buildFallbackInterpretation(
       "Send refund confirmation emails when refunds are issued under five thousand rupees."

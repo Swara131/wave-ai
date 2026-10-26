@@ -60,7 +60,7 @@ export default function AgentProtectionFlowDiagram() {
       <h2 id="asp-flow-heading" className="asp-card-title">
         How Wave Protects This Agent
       </h2>
-      <p className="asp-card-subtitle">Every action goes through our 6-step safety gate</p>
+      <p className="asp-card-subtitle">Every action goes through this safety gate before it can run.</p>
 
       <div className="asp-flow-diagram" aria-label="Wave protection flow">
         {FLOW_STEPS.map((step, index) => {

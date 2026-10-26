@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, Circle, AlertTriangle } from "lucide-react";
+import { Bell, Check, Circle, AlertTriangle } from "lucide-react";
 import type { AgentRequirement, AgentRequirementsResult } from "@/lib/agents/requirements/types";
 
 interface AgentRequirementsListProps {
@@ -30,24 +30,32 @@ export default function AgentRequirementsList({
     setPhoneDraft("");
   }, [result.agentId]);
 
+  const progressPct =
+    result.requiredCount > 0
+      ? Math.round((result.readyCount / result.requiredCount) * 100)
+      : 0;
+
   return (
     <section className="asp-card asp-checklist" aria-labelledby="asp-req-heading">
       <h2 id="asp-req-heading" className="asp-card-title">
         Let&apos;s prepare your agent
       </h2>
-      <p className="asp-checklist-step-sub" style={{ marginBottom: "1rem" }}>
-        {result.agentName} needs:
-      </p>
+      <p className="asp-checklist-lead">{result.agentName} needs:</p>
       <ol className="asp-checklist-list">
-        {result.requirements.map((item) => {
+        {result.requirements
+          .filter((item) => (item.scope ?? "setup") === "setup")
+          .map((item) => {
           const done = item.status === "ready";
+          const isNotify = item.key === "wave_notify";
           return (
             <li
               key={item.key}
-              className={`asp-checklist-item ${done ? "asp-checklist-item-done" : "asp-checklist-item-pending"}`}
+              className={`asp-checklist-item ${done ? "asp-checklist-item-done" : "asp-checklist-item-pending"} ${isNotify ? "asp-checklist-item-notify" : ""}`}
             >
               <span className="asp-checklist-marker" aria-hidden="true">
-                {done ? (
+                {done && isNotify ? (
+                  <Bell className="asp-checklist-check" strokeWidth={2.25} />
+                ) : done ? (
                   <Check className="asp-checklist-check" strokeWidth={2.5} />
                 ) : (
                   <AlertTriangle className="h-4 w-4" strokeWidth={2} />
@@ -164,19 +172,24 @@ export default function AgentRequirementsList({
           );
         })}
       </ol>
-      <p className="asp-checklist-step-sub" style={{ marginTop: "1rem" }}>
-        Progress: {result.readyCount} / {result.requiredCount} ready
-      </p>
+      <div className="asp-progress" aria-label={`${result.readyCount} of ${result.requiredCount} ready`}>
+        <div className="asp-progress-track">
+          <span style={{ width: `${progressPct}%` }} />
+        </div>
+        <p className="asp-progress-label">
+          {result.readyCount} / {result.requiredCount} ready
+        </p>
+      </div>
       {error ? (
         <p className="ag-error" role="alert">
           {error}
         </p>
       ) : null}
       {result.ready ? (
-        <p className="asp-complete-lead" style={{ marginTop: "1rem" }}>
+        <p className="asp-complete-lead">
           Your {result.agentName} is ready to test.
           {testHref ? (
-            <Link href={testHref} className="asp-checklist-btn" style={{ marginLeft: "0.75rem" }}>
+            <Link href={testHref} className="asp-checklist-btn">
               Run Test
             </Link>
           ) : null}

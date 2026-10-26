@@ -32,6 +32,7 @@ import {
   isDemoAgent,
 } from "@/lib/dashboard/founder-copy";
 import { buildSecurityOverviewMetrics } from "@/lib/integrations/agent-trust-metrics";
+import type { DecisionAgentRecord } from "@/lib/decision-agents/types";
 import {
   buildProposeExamples,
   buildStatusExamples,
@@ -116,6 +117,7 @@ export default function IntegrationsPage() {
   const [agentSources, setAgentSources] = useState<
     Record<string, { origin: string; label: string }>
   >({});
+  const [decisionAgents, setDecisionAgents] = useState<DecisionAgentRecord[]>([]);
 
   const [exampleTab, setExampleTab] = useState<ExampleTab>("propose");
   const [langTab, setLangTab] = useState<LangTab>("curl");
@@ -128,11 +130,12 @@ export default function IntegrationsPage() {
   const loadData = useCallback(async () => {
     setLoadError(null);
     try {
-      const [keysResult, approvalsRes, auditRes, sourcesRes] = await Promise.all([
+      const [keysResult, approvalsRes, auditRes, sourcesRes, decisionRes] = await Promise.all([
         fetchAgentKeys(),
         fetch("/api/approvals"),
         fetch("/api/audit/timeline?limit=200"),
         fetch("/api/v1/agents/sources"),
+        fetch("/api/v1/decision-agents"),
       ]);
 
       setKeys(keysResult);
@@ -142,6 +145,15 @@ export default function IntegrationsPage() {
           sources?: Record<string, { origin: string; label: string }>;
         };
         setAgentSources(sourcesPayload.sources ?? {});
+      }
+
+      if (decisionRes.ok) {
+        const decisionPayload = (await decisionRes.json()) as {
+          agents?: DecisionAgentRecord[];
+        };
+        setDecisionAgents(decisionPayload.agents ?? []);
+      } else {
+        setDecisionAgents([]);
       }
 
       if (approvalsRes.ok) {
@@ -338,7 +350,7 @@ export default function IntegrationsPage() {
           <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
           Loading your agents…
         </div>
-      ) : agents.length === 0 ? (
+      ) : agents.length === 0 && decisionAgents.length === 0 ? (
         <>
           <AgentsSecurityOverview metrics={securityOverview} />
           <ZeroAgentsEmptyState />
@@ -384,10 +396,40 @@ export default function IntegrationsPage() {
             <h2 id="agents-list-heading" className="ma-section-title">
               Your agents
             </h2>
-            {yourAgents.length === 0 ? (
+            {yourAgents.length === 0 && decisionAgents.length === 0 ? (
               <ZeroAgentsEmptyState variant="compact" />
             ) : (
               <div className="ma-agent-grid">
+                {decisionAgents.map((agent) => (
+                  <article key={agent.id} className="ma-agent-card ma-agent-card-v2 ds-panel">
+                    <div className="ma-agent-v2-head">
+                      <div>
+                        <h3 className="ma-agent-name">{agent.name}</h3>
+                        <p className="ma-agent-type">
+                          <span className="ma-agent-source-badge">● Multiple decisions</span>
+                        </p>
+                      </div>
+                      <span className="ma-agent-runtime-badge ma-agent-runtime-badge-active">
+                        {agent.status}
+                      </span>
+                    </div>
+                    <p className="ma-agent-purpose">&ldquo;{agent.purpose}&rdquo;</p>
+                    <div className="ma-agent-actions ma-agent-actions-v2">
+                      <Link
+                        href={`/decision-agents/${encodeURIComponent(agent.slug)}`}
+                        className="ds-btn ds-btn-primary ds-btn-sm"
+                      >
+                        Open
+                      </Link>
+                      <Link
+                        href={`/decision-agents/${encodeURIComponent(agent.slug)}/test`}
+                        className="ds-btn ds-btn-secondary ds-btn-sm"
+                      >
+                        Run
+                      </Link>
+                    </div>
+                  </article>
+                ))}
                 {yourAgents.map((agent) => {
                   const key = keyByAgentId.get(agent.id);
                   const expanded = expandedAgentId === agent.id;
@@ -421,7 +463,9 @@ export default function IntegrationsPage() {
         </>
       )}
 
-      {!loading && agents.length === 0 ? <AgentsBottomCTA /> : null}
+      {!loading && agents.length === 0 && decisionAgents.length === 0 ? (
+        <AgentsBottomCTA />
+      ) : null}
 
       <section className="ds-section ma-advanced">
         <button

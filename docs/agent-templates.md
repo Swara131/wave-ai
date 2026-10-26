@@ -4,7 +4,7 @@ Templates are a **catalog + clone** layer on top of the existing agent builder. 
 
 ## How templates are seeded
 
-1. Canonical definitions live in `lib/templates/marketplace-catalog.ts` (50 published templates, unique `slug`).
+1. Canonical definitions live in `lib/templates/marketplace-catalog.ts` (published templates, unique `slug`).
 2. Optional database persistence: table `public.templates` (extended by `supabase/migrations/20260930120000_agent_templates_marketplace.sql`).
 3. Seed command upserts by `id`/`slug` and is idempotent:
 
@@ -12,7 +12,7 @@ Templates are a **catalog + clone** layer on top of the existing agent builder. 
 npm run seed:templates
 ```
 
-If the extra columns are missing, the UI still lists the in-code catalog (50 templates). The original 8 `template-*` rows stay unpublished so they do not appear in the marketplace but still resolve for old `source = template:template-N` agents.
+If the extra columns are missing, the UI still lists the in-code catalog (54 templates). The original 8 `template-*` rows stay unpublished so they do not appear in the marketplace but still resolve for old `source = template:template-N` agents.
 
 ## How to add a new template
 

@@ -11,6 +11,7 @@ import { insertAgentPolicy, insertBuilderAgent, resolveUniqueAgentSlug, updateBu
 import type { CreateBuilderAgentInput } from "./types";
 import { seedWorkflowSafetySettings } from "./workflow/seed";
 import { syncAgentSchedule } from "./scheduling/sync-agent-schedule";
+import { createAgentActivationProposal } from "./activation/approval";
 
 export interface CreateBuilderAgentResult {
   agent: Awaited<ReturnType<typeof insertBuilderAgent>>;
@@ -115,6 +116,18 @@ export async function createBuilderAgent(
     createdBy: params.userId,
     expiresAt: null,
   });
+
+  try {
+    await createAgentActivationProposal(admin, {
+      agent,
+      userId: params.userId,
+    });
+  } catch (err) {
+    console.warn("[activation] failed to create approval on agent create", {
+      agentId: agent.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   return {
     agent,

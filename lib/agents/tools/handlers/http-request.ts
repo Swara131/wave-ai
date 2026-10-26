@@ -1,16 +1,8 @@
+import { isBlockedHost } from "@/lib/http/outbound-url";
 import type { ToolExecutionOutcome } from "../../runtime/types";
 
 const MAX_RESPONSE_BYTES = 32_768;
 const DEFAULT_TIMEOUT_MS = 15_000;
-
-function isBlockedHost(hostname: string): boolean {
-  const lower = hostname.toLowerCase();
-  if (lower === "localhost" || lower.endsWith(".local")) return true;
-  if (lower === "127.0.0.1" || lower === "0.0.0.0") return true;
-  if (lower.startsWith("10.") || lower.startsWith("192.168.")) return true;
-  if (lower.startsWith("172.")) return true;
-  return false;
-}
 
 export async function handleHttpRequest(
   input: Record<string, unknown>

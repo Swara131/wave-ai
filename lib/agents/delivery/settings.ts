@@ -19,12 +19,22 @@ export function parseDeliverySettings(
 ): AgentDeliverySettings {
   const raw = safetySettings?.delivery;
   if (raw && typeof raw === "object" && isDeliveryMode(raw.mode)) {
+    const destinationEmail =
+      typeof raw.destinationEmail === "string" ? raw.destinationEmail.trim() : null;
+    const destinationPhone =
+      typeof raw.destinationPhone === "string" ? raw.destinationPhone.trim() : null;
+    const mode =
+      raw.mode === "email" && !destinationEmail
+        ? "notification"
+        : raw.mode === "whatsapp" && !destinationPhone
+          ? "notification"
+          : raw.mode === "both" && !destinationEmail && !destinationPhone
+            ? "notification"
+            : raw.mode;
     return {
-      mode: raw.mode,
-      destinationEmail:
-        typeof raw.destinationEmail === "string" ? raw.destinationEmail.trim() : null,
-      destinationPhone:
-        typeof raw.destinationPhone === "string" ? raw.destinationPhone.trim() : null,
+      mode,
+      destinationEmail,
+      destinationPhone,
     };
   }
 

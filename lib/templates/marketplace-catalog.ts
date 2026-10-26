@@ -67,6 +67,121 @@ function hydrate(draft: CatalogDraft): AgentTemplate {
 
 const DRAFTS: CatalogDraft[] = [
   {
+    slug: "lighting-concierge",
+    name: "Lighting Concierge",
+    shortDescription:
+      "An AI assistant that recommends room lighting based on the customer's needs, décor preferences, and budget, then helps arrange an electrician visit with safety checks.",
+    longDescription:
+      "Collects a customer intake, uses Qloo taste insights when the API is configured, and builds a room lighting plan with a rate-table estimate. Quotes of ₹5,000 or more, incomplete quotes, and unverified addresses go through WAVE approvals. Installation visits stay pending until a human verifies the address. WAVE never invents supplier prices, electrician availability, or a verified address.",
+    category: "home-services",
+    icon: "Lamp",
+    tags: [
+      "lighting",
+      "home-services",
+      "electricians",
+      "qloo",
+      "quotes",
+      "appointments",
+    ],
+    riskLevel: "medium",
+    estimatedSetupMinutes: 12,
+    suggestedIntegrations: ["Qloo", "Wave notify", "Approvals"],
+    tools: [
+      "create_service_quote",
+      "verify_service_address",
+      "request_electrician_visit",
+    ],
+    defaultInstructions:
+      "Recommend lighting from the customer's stated needs and any real Qloo tags. Use only the configured rate table for money. Label estimates as non-binding. Do not tell customers to do wiring work. Do not book an electrician until the service address is verified by a reviewer. Do not invent Qloo results, prices, or confirmed appointment slots.",
+    exampleTasks: [
+      "Plan warm lighting for a 12x14 living room under ₹20,000",
+      "Estimate a kitchen lighting replacement and request an electrician visit",
+    ],
+    defaultTrigger: "manual",
+    supportsThreshold: true,
+    defaultThreshold: 5000,
+    isFeatured: true,
+    sortOrder: 0,
+  },
+  {
+    slug: "travel-companion",
+    name: "Travel Companion for Local Discovery",
+    shortDescription:
+      "A personalized travel-planning agent that discovers experiences matching a traveler's tastes, creates day-by-day itineraries, and manages booking requests with built-in safety checks.",
+    longDescription:
+      "Collects trip preferences, uses Qloo taste insights when the API is configured, and builds a day-by-day itinerary. Bookings of ₹5,000 or more, multi-day trips, unknown prices, and overlapping times go through WAVE approvals. WAVE never invents venues, live prices, opening hours, tickets, or confirmed reservations. Without a booking provider, WAVE only stores a pending request.",
+    category: "travel-lifestyle",
+    icon: "Compass",
+    tags: ["travel", "itinerary", "qloo", "bookings", "local-discovery"],
+    riskLevel: "medium",
+    estimatedSetupMinutes: 12,
+    suggestedIntegrations: ["Qloo", "Wave notify", "Approvals"],
+    tools: ["plan_travel_itinerary", "request_travel_booking"],
+    defaultInstructions:
+      "Plan local itineraries from the traveler's stated preferences and any real Qloo tags. Label unverified venues, prices, and hours clearly. Do not invent businesses, tickets, or confirmation numbers. Create pending booking requests only. Do not charge cards. Require review for ₹5,000 or more, multi-day bookings, unknown prices, and overlapping times.",
+    exampleTasks: [
+      "Plan a 3-day Jaipur trip for two people who like food, history, and art under ₹18,000",
+      "Request a pending restaurant booking for the evening food stop",
+    ],
+    defaultTrigger: "manual",
+    supportsThreshold: true,
+    defaultThreshold: 5000,
+    isFeatured: true,
+    sortOrder: 0,
+  },
+  {
+    slug: "wedding-celebration-planner",
+    name: "Wedding & Celebration Planner",
+    shortDescription:
+      "An AI planning assistant that organizes weddings and celebrations, compares venues and vendors against the couple's preferences and budget, drafts invitations, and protects expensive vendor payments with WAVE safety controls.",
+    longDescription:
+      "Collects event details and stated couple or family preferences, then builds a plan, vendor shortlist, budget, checklist, and invitation drafts. Deposits of ₹10,000 or more need human approval. Payments to vendors not on the allowlist are blocked. WAVE never invents vendors, quotes, or paid status, and this template does not use Qloo. Without a payout provider, deposits stay pending payment.",
+    category: "events-planning",
+    icon: "Heart",
+    tags: ["wedding", "events", "vendors", "budget", "deposits", "approvals"],
+    riskLevel: "medium",
+    estimatedSetupMinutes: 15,
+    suggestedIntegrations: ["Wave notify", "Approvals"],
+    tools: ["plan_wedding_event", "request_wedding_deposit"],
+    defaultInstructions:
+      "Plan from stated preferences only. Do not use Qloo. Do not invent vendors, quotes, availability, or paid deposits. Keep couple and family notes separate. Require allowlist approval before a deposit. Require review at ₹10,000 or more. Never mark a deposit as paid without a payment provider.",
+    exampleTasks: [
+      "Plan a 180-guest garden wedding in Jaipur under ₹8,50,000",
+      "Compare entered venue quotes and request a pending deposit for an approved vendor",
+    ],
+    defaultTrigger: "manual",
+    supportsThreshold: true,
+    defaultThreshold: 10000,
+    isFeatured: true,
+    sortOrder: 0,
+  },
+  {
+    slug: "group-decision-planner",
+    name: "Group Decision Planner",
+    shortDescription:
+      "An AI agent that combines individual tastes and practical constraints to find an outing everyone can reasonably agree on.",
+    longDescription:
+      "Collects separate profiles for each friend, uses Qloo taste and place insights when configured, and returns three fairness-aware restaurant options for one city. Not-for-me feedback re-ranks on the server. Reservations stay pending confirmation unless a booking provider is connected. WAVE never invents restaurants, hours, prices, or confirmed tables.",
+    category: "travel-lifestyle",
+    icon: "Users",
+    tags: ["group", "restaurants", "qloo", "fairness", "outings"],
+    riskLevel: "medium",
+    estimatedSetupMinutes: 12,
+    suggestedIntegrations: ["Qloo", "Wave notify", "Approvals"],
+    tools: ["plan_group_outing", "request_group_reservation"],
+    defaultInstructions:
+      "Keep each participant's likes separate. Use real Qloo entity and place insights when QLOO_API_KEY is set. Label fallback results. Do not invent restaurants, hours, prices, or reservations. Require review for paid requests at the configured INR threshold. Store pending confirmation only when no booking provider exists.",
+    exampleTasks: [
+      "Plan a Saturday evening in Mumbai for four friends with different food tastes under ₹8,000",
+      "Re-rank restaurants after one friend vetoes a pick for location",
+    ],
+    defaultTrigger: "manual",
+    supportsThreshold: true,
+    defaultThreshold: 5000,
+    isFeatured: true,
+    sortOrder: 0,
+  },
+  {
     slug: "lead-researcher",
     name: "Lead Researcher",
     shortDescription: "Finds and qualifies prospects from approved sources.",

@@ -14,6 +14,7 @@ export interface WorkflowNodeDefinition {
 }
 
 const TOOL_ORDER: string[] = [
+  "fetch_url",
   "web_search",
   "read_document",
   "google_sheets",
@@ -248,6 +249,7 @@ function toolIcon(toolName: string): string {
     case "send_email":
       return "✉️";
     case "http_request":
+    case "fetch_url":
       return "🌐";
     case "google_sheets":
       return "📊";

@@ -77,8 +77,8 @@ export default function WaveNotificationHost() {
         <p className="wave-notify-kicker">Wave notification</p>
         <p className="wave-notify-title">{toast.subject || toast.risk}</p>
         {toast.preview ? <p className="wave-notify-preview">{toast.preview}</p> : null}
-        <Link href="/notifications" className="wave-notify-link">
-          Open notifications
+        <Link href={toast.openHref || "/notifications"} className="wave-notify-link">
+          {toast.openHref ? "Open result" : "Open notifications"}
         </Link>
       </div>
     </div>

@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { Check, Loader2 } from "lucide-react";
+import { ArrowRight, Check, Loader2 } from "lucide-react";
 import PageShell from "@/components/ui/PageShell";
+import { agentRunInputPath } from "@/lib/agents/platform/run-input-path";
 import type { AgentRequirement, AgentRequirementsResult } from "@/lib/agents/requirements/types";
 import DataSourceSetupPanel from "@/components/agents/setup/DataSourceSetupPanel";
 
@@ -55,6 +56,15 @@ export default function PrepareAgentPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!result?.ready || !agentId) return;
+    router.replace(
+      result.runMissing.length
+        ? agentRunInputPath(agentId, result.runMissing)
+        : `/agents/${encodeURIComponent(agentId)}/test`
+    );
+  }, [agentId, result, router]);
+
   const save = async (key: string, value: string) => {
     if (!agentId || !value.trim()) return;
     setSavingKey(key);
@@ -93,6 +103,8 @@ export default function PrepareAgentPage() {
             (item): item is AgentRequirement =>
               Boolean(item) &&
               isInteractive(item) &&
+              item.scope !== "run" &&
+              item.section !== "run_input" &&
               item.key !== "ticket_source" &&
               item.key !== "data_source"
           ),
@@ -100,18 +112,27 @@ export default function PrepareAgentPage() {
       .filter((section) => section.items.length > 0);
   }, [result, byKey]);
 
-  const sectionStatus = (keys: string[]) => {
-    const items = keys.map((key) => byKey.get(key)).filter(Boolean) as AgentRequirement[];
-    const required = items.filter((item) => item.required);
+  const sectionStatus = (items: AgentRequirement[]) => {
+    const required = items.filter((item) => item.required && item.scope !== "run");
     if (required.length === 0) return "optional";
     if (required.every((item) => item.status === "ready")) return "ready";
     if (required.some((item) => item.status === "ready")) return "partial";
     return "missing";
   };
 
+  const needsRunPage = Boolean(result?.runMissing?.length);
+  const needsPhotoPage = Boolean(
+    result?.runMissing?.some((item) => item.key === "venue_photo" || item.inputType === "file")
+  );
+  const progressMax = Math.max(result?.requiredCount ?? 0, 1);
+  const progressValue = result?.requiredCount ? result.readyCount : 1;
+  const progressLabel = result?.requiredCount
+    ? `${result.readyCount} of ${result.requiredCount} complete`
+    : "Setup complete";
+
   if (loading) {
     return (
-      <PageShell maxWidth="4xl" className="prep-page">
+      <PageShell layout="workspace" className="studio-shell">
         <p className="prep-loading">
           <Loader2 className="h-5 w-5 animate-spin" /> Loading what this agent needs…
         </p>
@@ -121,46 +142,61 @@ export default function PrepareAgentPage() {
 
   if (!result) {
     return (
-      <PageShell maxWidth="4xl" className="prep-page">
-        <p role="alert">{error ?? "Agent not found."}</p>
+      <PageShell layout="workspace" className="studio-shell">
+        <p className="prep-error" role="alert">{error ?? "Agent not found."}</p>
       </PageShell>
     );
   }
 
   return (
-    <PageShell maxWidth="4xl" className="prep-page">
+    <PageShell layout="workspace" className="studio-shell">
+      <div className="prep-page">
       <header className="prep-header">
-        <p className="prep-kicker">Prepare your agent</p>
-        <h1>Let&apos;s provide the information your {result.agentName} needs before we run a test.</h1>
+        <p className="prep-kicker">Prepare</p>
+        <p className="prep-agent-name">{result.agentName}</p>
+        <h1>Finish setup, then run with real input.</h1>
         <p className="prep-agent">
-          Wave is asking only for what this agent needs to do its job — not a generic technical checklist.
+          Only the settings this agent actually needs. Link, topic, or records are collected on the next page — not invented here.
         </p>
+        <ol className="prep-stepper" aria-label="Setup steps">
+          <li className="is-done">Workflow</li>
+          <li className="is-active">Prepare</li>
+          <li className={needsRunPage ? "" : "is-muted"}>
+            {needsPhotoPage ? "Photo" : needsRunPage ? "Link" : "Test"}
+          </li>
+          <li>Result</li>
+        </ol>
       </header>
 
       <section className="prep-progress" aria-label="Setup progress">
-        <p>
-          Progress: {result.readyCount} of {result.requiredCount} completed
-        </p>
+        <div className="prep-progress-copy">
+          <p>Progress</p>
+          <strong>{progressLabel}</strong>
+        </div>
         <div className="prep-progress-bar">
           <span
             style={{
-              width: `${result.requiredCount ? (result.readyCount / result.requiredCount) * 100 : 0}%`,
+              width: `${Math.min(100, (progressValue / progressMax) * 100)}%`,
             }}
           />
         </div>
+        {visibleSections.length > 0 ? (
         <ol className="prep-section-status">
           {visibleSections.map((section) => {
-            const status = sectionStatus(section.keys);
+            const status = sectionStatus(section.items);
             return (
               <li key={section.id} className={`is-${status}`}>
-                {status === "ready" ? "✓" : status === "partial" ? "⚠" : "○"} {section.title}
+                {status === "ready" ? "✓" : status === "partial" ? "◐" : "○"} {section.title}
                 <small>
-                  {status === "ready" ? "Completed" : status === "partial" ? "Complete" : "Needed"}
+                  {status === "ready" ? "Done" : status === "partial" ? "In progress" : "Needed"}
                 </small>
               </li>
             );
           })}
         </ol>
+        ) : (
+          <p className="prep-progress-empty">No extra setup fields for this agent.</p>
+        )}
       </section>
 
       {error ? (
@@ -256,10 +292,10 @@ export default function PrepareAgentPage() {
         </section>
       ))}
 
-      {result.testScenario.length > 0 ? (
+      {result.testScenario.filter((line) => !/standard|notification/i.test(line.value)).length > 0 ? (
         <section className="prep-scenario">
-          <h2>Test scenario</h2>
-          <p>This is the information that will be used for the first test.</p>
+          <h2>Saved for this agent</h2>
+          <p>These values will be used when it runs.</p>
           <dl>
             {result.testScenario.map((line) => (
               <div key={`${line.label}-${line.value}`}>
@@ -273,8 +309,22 @@ export default function PrepareAgentPage() {
 
       {result.ready ? (
         <section className="prep-review" id="ready-to-test">
-          <h2>Ready to test</h2>
-          <p>{result.agentName}</p>
+          <p className="prep-review-kicker">Next</p>
+          <h2>
+            {needsPhotoPage
+              ? "Upload a venue photo"
+              : needsRunPage
+                ? "Paste a link to summarize"
+                : "Ready to test"}
+          </h2>
+          <p>
+            {needsPhotoPage
+              ? "Setup is done. On the next page you will upload a real photo of the space. Wave will not invent decorations or prices."
+              : needsRunPage
+                ? "Setup is done. On the next page you will enter a YouTube or public URL. Wave will fetch that page and summarize only what it can read."
+                : `${result.agentName} has the setup it needs. Run it against real configured data.`}
+          </p>
+          {visibleSections.length > 0 ? (
           <ul>
             {visibleSections.map((section) => (
               <li key={section.id}>
@@ -284,17 +334,20 @@ export default function PrepareAgentPage() {
               </li>
             ))}
           </ul>
-          {result.testScenario.length > 0 ? (
-            <p className="prep-hint">
-              Test data: {result.testScenario.map((line) => line.value).join(" · ")}
-            </p>
           ) : null}
           <button
             type="button"
             className="prep-btn prep-btn-primary"
-            onClick={() => router.push(`/agents/${encodeURIComponent(agentId)}/test`)}
+            onClick={() =>
+              router.push(
+                needsRunPage
+                  ? agentRunInputPath(agentId, result.runMissing)
+                  : `/agents/${encodeURIComponent(agentId)}/test`
+              )
+            }
           >
-            Test Agent
+            {needsRunPage ? "Continue" : "Test Agent"}
+            <ArrowRight className="h-4 w-4" />
           </button>
         </section>
       ) : (
@@ -307,7 +360,11 @@ export default function PrepareAgentPage() {
               void (async () => {
                 const next = await load({ silent: true });
                 if (next?.ready) {
-                  router.push(`/agents/${encodeURIComponent(agentId)}/test`);
+                  router.push(
+                    next.runMissing.length
+                      ? agentRunInputPath(agentId, next.runMissing)
+                      : `/agents/${encodeURIComponent(agentId)}/test`
+                  );
                   return;
                 }
                 setReviewOpen(true);
@@ -334,6 +391,7 @@ export default function PrepareAgentPage() {
           ) : null}
         </div>
       )}
+      </div>
     </PageShell>
   );
 }

@@ -1,24 +1,132 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { LOG_UPLOADS_BUCKET } from "@/lib/storage/constants";
+import { readDataSourceConfig } from "@/lib/agents/data-source/config";
 import type { ToolExecutionOutcome, ToolHandlerContext } from "../../runtime/types";
 
 const MAX_BYTES = 64_768;
+const PLACEHOLDER_IDS = new Set(["latest", "last", "current", "newest"]);
+
+export const MISSING_DOCUMENT_ERROR =
+  "No file is uploaded for this agent. Upload a document or CSV in Prepare, then run this test again.";
+
+function trimString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export function isPlaceholderDocumentId(value: string | null): boolean {
+  if (!value) return true;
+  return PLACEHOLDER_IDS.has(value.toLowerCase());
+}
+
+export type ResolvedDocumentTarget = {
+  uploadId: string | null;
+  storagePath: string | null;
+  filename: string | null;
+  inlineText: string | null;
+  isSample: boolean;
+  lookupLatestUpload: boolean;
+};
+
+export function resolveReadDocumentTarget(
+  input: Record<string, unknown>,
+  context: ToolHandlerContext
+): ResolvedDocumentTarget {
+  const rawId = trimString(input.uploadId) || trimString(input.documentId);
+  const storagePath = trimString(input.storagePath);
+  const explicitId = rawId && !isPlaceholderDocumentId(rawId) ? rawId : null;
+
+  if (explicitId || storagePath) {
+    return {
+      uploadId: explicitId,
+      storagePath,
+      filename: null,
+      inlineText: null,
+      isSample: false,
+      lookupLatestUpload: false,
+    };
+  }
+
+  const dataSource = readDataSourceConfig(context.agent.record);
+  if (dataSource?.kind === "csv_upload" && dataSource.csv) {
+    const csvId = trimString(dataSource.csv.uploadId);
+    const csvPath = trimString(dataSource.csv.storagePath);
+    const inline = trimString(dataSource.csv.inlineText);
+    if (csvId || csvPath || inline) {
+      return {
+        uploadId: csvId && !isPlaceholderDocumentId(csvId) ? csvId : null,
+        storagePath: csvPath,
+        filename: trimString(dataSource.csv.filename) ?? "upload.csv",
+        inlineText: inline,
+        isSample: dataSource.isSample,
+        lookupLatestUpload: false,
+      };
+    }
+  }
+
+  if (dataSource?.kind === "manual_sample") {
+    const raw = trimString(dataSource.manual?.raw);
+    if (raw) {
+      return {
+        uploadId: null,
+        storagePath: null,
+        filename: "sample-data.txt",
+        inlineText: raw,
+        isSample: true,
+        lookupLatestUpload: false,
+      };
+    }
+  }
+
+  return {
+    uploadId: null,
+    storagePath: null,
+    filename: null,
+    inlineText: null,
+    isSample: false,
+    lookupLatestUpload: true,
+  };
+}
+
+function textOutcome(params: {
+  filename: string;
+  content: string;
+  storagePath?: string | null;
+  isSample: boolean;
+}): ToolExecutionOutcome {
+  const truncated = Buffer.byteLength(params.content, "utf8") > MAX_BYTES;
+  const content =
+    truncated ? params.content.slice(0, MAX_BYTES) : params.content;
+  return {
+    executed: true,
+    output: {
+      filename: params.filename,
+      storagePath: params.storagePath ?? null,
+      byteLength: Buffer.byteLength(params.content, "utf8"),
+      truncated,
+      content,
+      isSample: params.isSample,
+    },
+  };
+}
 
 export async function handleReadDocument(
   input: Record<string, unknown>,
   context: ToolHandlerContext
 ): Promise<ToolExecutionOutcome> {
-  const uploadId =
-    (typeof input.uploadId === "string" && input.uploadId.trim()) ||
-    (typeof input.documentId === "string" && input.documentId.trim()) ||
-    null;
-  const storagePath =
-    typeof input.storagePath === "string" ? input.storagePath.trim() : null;
+  const target = resolveReadDocumentTarget(input, context);
 
-  if (!uploadId && !storagePath) {
+  if (target.inlineText && !target.uploadId && !target.storagePath) {
+    return textOutcome({
+      filename: target.filename ?? "document",
+      content: target.inlineText,
+      isSample: target.isSample,
+    });
+  }
+
+  if (!target.uploadId && !target.storagePath && !target.lookupLatestUpload) {
     return {
       executed: false,
-      error: "read_document requires uploadId or storagePath.",
+      error: MISSING_DOCUMENT_ERROR,
       output: {},
     };
   }
@@ -26,10 +134,41 @@ export async function handleReadDocument(
   try {
     const admin = createAdminClient();
 
-    let path = storagePath;
-    let filename = "document";
+    let path = target.storagePath;
+    let filename = target.filename ?? "document";
+    let uploadId = target.uploadId;
 
-    if (uploadId) {
+    if (target.lookupLatestUpload && !uploadId && !path) {
+      const { data: latest, error: latestError } = await admin
+        .from("uploaded_logs")
+        .select("id, filename, storage_path, user_id")
+        .eq("user_id", context.userId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (latestError) {
+        return {
+          executed: false,
+          error: latestError.message,
+          output: {},
+        };
+      }
+
+      if (latest) {
+        const ownerId = typeof latest.user_id === "string" ? latest.user_id : null;
+        const storagePathValue =
+          typeof latest.storage_path === "string" ? latest.storage_path : null;
+        const filenameValue = typeof latest.filename === "string" ? latest.filename : null;
+        if (ownerId === context.userId && storagePathValue && filenameValue) {
+          uploadId = typeof latest.id === "string" ? latest.id : null;
+          path = storagePathValue;
+          filename = filenameValue;
+        }
+      }
+    }
+
+    if (uploadId && !path) {
       const { data: row, error } = await admin
         .from("uploaded_logs")
         .select("id, filename, storage_path, user_id")
@@ -37,6 +176,13 @@ export async function handleReadDocument(
         .maybeSingle();
 
       if (error || !row) {
+        if (target.inlineText) {
+          return textOutcome({
+            filename: target.filename ?? "document",
+            content: target.inlineText,
+            isSample: target.isSample,
+          });
+        }
         return {
           executed: false,
           error: error?.message ?? "Document not found.",
@@ -75,10 +221,17 @@ export async function handleReadDocument(
     }
 
     if (!path) {
+      if (target.inlineText) {
+        return textOutcome({
+          filename: target.filename ?? "document",
+          content: target.inlineText,
+          isSample: target.isSample,
+        });
+      }
       return {
         executed: false,
-        error: "Could not resolve document path.",
-        output: { uploadId, storagePath },
+        error: MISSING_DOCUMENT_ERROR,
+        output: { uploadId, storagePath: path },
       };
     }
 
@@ -87,6 +240,14 @@ export async function handleReadDocument(
       .download(path);
 
     if (downloadError || !blob) {
+      if (target.inlineText) {
+        return textOutcome({
+          filename,
+          content: target.inlineText,
+          storagePath: path,
+          isSample: target.isSample,
+        });
+      }
       return {
         executed: false,
         error: downloadError?.message ?? "Failed to download document.",
@@ -106,13 +267,22 @@ export async function handleReadDocument(
         byteLength: buffer.length,
         truncated,
         content: text,
+        isSample: target.isSample,
       },
     };
   } catch (err) {
+    if (target.inlineText) {
+      return textOutcome({
+        filename: target.filename ?? "document",
+        content: target.inlineText,
+        storagePath: target.storagePath,
+        isSample: target.isSample,
+      });
+    }
     return {
       executed: false,
       error: err instanceof Error ? err.message : "Document read failed.",
-      output: { uploadId, storagePath },
+      output: { uploadId: target.uploadId, storagePath: target.storagePath },
     };
   }
 }

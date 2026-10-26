@@ -4,6 +4,7 @@ import { getToolDefinition, resolveToolName } from "../../tools/catalog";
 export const TOOL_ACTION_TYPES: Record<string, string> = {
   web_search: "research.web_search",
   http_request: "integration.http",
+  fetch_url: "research.fetch_url",
   send_email: "communication.email",
   send_whatsapp_message: "communication.whatsapp",
   issue_refund: "financial.refund",
@@ -15,6 +16,15 @@ export const TOOL_ACTION_TYPES: Record<string, string> = {
   google_sheets: "integration.google_sheets",
   x_search: "social.x_search",
   create_calendar_event: "calendar.create",
+  create_service_quote: "service.quote",
+  verify_service_address: "service.address_verify",
+  request_electrician_visit: "service.appointment_request",
+  plan_travel_itinerary: "travel.itinerary",
+  request_travel_booking: "travel.booking_request",
+  plan_wedding_event: "wedding.plan",
+  request_wedding_deposit: "wedding.deposit",
+  plan_group_outing: "group.plan",
+  request_group_reservation: "group.reservation",
 };
 
 export function resolveActionType(toolName: string, override?: string): string {

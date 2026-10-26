@@ -3,11 +3,13 @@
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { ArrowRight, Loader2 } from "lucide-react";
 import PageShell from "@/components/ui/PageShell";
-import DecisionAgentPreviewCard from "@/components/decision-agents/DecisionAgentPreviewCard";
-import DecisionAgentInlineTest from "@/components/decision-agents/DecisionAgentInlineTest";
+import DecisionLiveRun from "@/components/decision-agents/DecisionLiveRun";
+import DecisionWorkflowCanvas from "@/components/decision-agents/DecisionWorkflowCanvas";
 import { DECISION_AGENT_TEMPLATES, type GeneratedDecisionAgentPreview } from "@/lib/decision-agents/types";
+
+type Phase = "prompt" | "workflow" | "run";
 
 export default function CreateDecisionAgentPage() {
   const searchParams = useSearchParams();
@@ -15,29 +17,21 @@ export default function CreateDecisionAgentPage() {
   const template = DECISION_AGENT_TEMPLATES.find((item) => item.id === templateId);
 
   const [prompt, setPrompt] = useState(template?.purpose ?? "");
+  const [phase, setPhase] = useState<Phase>("prompt");
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [deploying, setDeploying] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [preview, setPreview] = useState<GeneratedDecisionAgentPreview | null>(null);
   const [savedSlug, setSavedSlug] = useState<string | null>(null);
-  const [showTest, setShowTest] = useState(false);
-  const [deployMessage, setDeployMessage] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
 
   const handleGenerate = async () => {
-    if (!prompt.trim()) {
-      setError("Describe what decision this agent should make.");
+    if (prompt.trim().length < 12) {
+      setError("Describe the decisions this agent should make, in a full sentence.");
       return;
     }
     setGenerating(true);
     setError(null);
-    setSaveError(null);
-    setDeployMessage(null);
     setSavedSlug(null);
-    setShowTest(false);
-
     try {
       const response = await fetch("/api/v1/decision-agents/generate", {
         method: "POST",
@@ -54,152 +48,203 @@ export default function CreateDecisionAgentPage() {
         error?: string;
       };
       if (!response.ok || !payload.preview) {
-        throw new Error(payload.error ?? "Could not generate decision agent.");
+        throw new Error(payload.error ?? "Could not generate the decision workflow.");
       }
       setPreview(payload.preview);
-      setEditing(false);
+      setPhase("workflow");
+      try {
+        const saved = await persistPreview(payload.preview);
+        if (saved) setSavedSlug(saved);
+      } catch (saveErr) {
+        setError(
+          saveErr instanceof Error
+            ? saveErr.message
+            : "Workflow is ready, but it could not be saved to My Agents yet."
+        );
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not generate decision agent.");
+      setError(err instanceof Error ? err.message : "Could not generate the decision workflow.");
       setPreview(null);
     } finally {
       setGenerating(false);
     }
   };
 
-  const handleSave = async () => {
-    if (!preview) return;
+  const persistPreview = async (draft: GeneratedDecisionAgentPreview): Promise<string | null> => {
+    const response = await fetch("/api/v1/decision-agents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: draft.name,
+        purpose: draft.purpose,
+        decisionType: draft.decisionType,
+        config: draft.config,
+      }),
+    });
+    const payload = (await response.json()) as { agent?: { slug: string }; error?: string };
+    if (!response.ok || !payload.agent) {
+      throw new Error(payload.error ?? "Could not save.");
+    }
+    return payload.agent.slug;
+  };
+
+  const handleSave = async (): Promise<string | null> => {
+    if (!preview) return savedSlug;
+    if (savedSlug) return savedSlug;
     setSaving(true);
-    setSaveError(null);
+    setError(null);
     try {
-      const response = await fetch("/api/v1/decision-agents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: preview.name,
-          purpose: preview.purpose,
-          decisionType: preview.decisionType,
-          config: preview.config,
-        }),
-      });
-      const payload = (await response.json()) as {
-        agent?: { slug: string };
-        error?: string;
-      };
-      if (!response.ok || !payload.agent) {
-        throw new Error(payload.error ?? "Could not save decision agent. Please try again.");
-      }
-      setSavedSlug(payload.agent.slug);
+      const slug = await persistPreview(preview);
+      setSavedSlug(slug);
+      return slug;
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Could not save decision agent. Please try again.");
+      setError(err instanceof Error ? err.message : "Could not save.");
+      return null;
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDeploy = async () => {
-    if (!savedSlug) {
-      setSaveError("Save the agent before deploying.");
-      return;
-    }
-    setDeploying(true);
-    setSaveError(null);
-    try {
-      const response = await fetch(
-        `/api/v1/decision-agents/${encodeURIComponent(savedSlug)}/deploy`,
-        { method: "POST" }
-      );
-      const payload = (await response.json()) as {
-        success?: boolean;
-        message?: string;
-        error?: string;
-      };
-      if (!response.ok || !payload.success) {
-        throw new Error(payload.error ?? "Deployment failed.");
-      }
-      setDeployMessage(payload.message ?? "Decision agent deployed successfully.");
-      if (preview) {
-        setPreview({ ...preview, status: "deployed" });
-      }
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Deployment failed.");
-    } finally {
-      setDeploying(false);
-    }
+  const handleConfirm = async () => {
+    const slug = await handleSave();
+    if (!slug) return;
+    setPhase("run");
   };
 
   return (
-    <PageShell maxWidth="5xl" className="zdec-page">
-      <Link href="/decision-agents" className="zplat-btn zplat-btn-ghost">
-        ← Multiple Decision Agents
-      </Link>
+    <PageShell
+      layout="workspace"
+      className={phase === "workflow" ? "studio-shell studio-shell-scroll" : "studio-shell"}
+    >
+      {phase === "prompt" ? (
+      <div className="zdec-studio">
+        <ol className="prep-stepper">
+          <li className="is-active">Prompt</li>
+          <li>Workflow</li>
+          <li>Live decisions</li>
+        </ol>
 
-      <header className="zdec-header">
-        <div>
-          <h1>Multiple Decision Agents</h1>
-          <p className="zdec-lead">
-            Create AI agents that make decisions based on your rules, context, and risk policies.
-          </p>
-        </div>
-      </header>
-
-      {!preview || editing ? (
-        <section className="ds-panel zdec-create-form">
-          <label className="zplat-field">
-            <span>Describe what decision this agent should make</span>
+          <div className="studio-prompt-stage">
+            <p className="studio-kicker">Multiple decisions · one agent</p>
+            <h1>What decisions should this agent make?</h1>
+            <p className="studio-lead">
+              Describe the real judgments — eligibility, risk, and whether to act. Wave will build a
+              workflow of those decisions. It will not invent case values.
+            </p>
+            <label className="studio-prompt-field">
             <textarea
-              className="ds-input zdec-prompt"
-              rows={5}
+              rows={7}
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Example: Decide whether a customer refund should be automatically approved."
+              placeholder='Example: Build an assistant called "Jio IPO Research & Decision Assistant" that checks official sources, assesses investor risk, and never blindly recommends applying.'
             />
-          </label>
-          {error ? <p className="zplat-error" role="alert">{error}</p> : null}
-          <button
-            type="button"
-            className="zplat-btn zplat-btn-primary"
-            disabled={generating || !prompt.trim()}
-            onClick={() => void handleGenerate()}
-          >
-            {generating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Creating decision agent…
-              </>
-            ) : (
-              "Generate Decision Agent"
-            )}
-          </button>
-        </section>
+            </label>
+            {error ? (
+              <p className="zplat-error" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <div className="studio-actions">
+              <button
+                type="button"
+                className="studio-primary studio-primary-lg"
+                disabled={generating || prompt.trim().length < 12}
+                onClick={() => void handleGenerate()}
+              >
+                {generating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Building workflow…
+                  </>
+                ) : (
+                  <>
+                    Generate workflow
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+              <Link href="/decision-agents" className="run-back">
+                All decision agents
+              </Link>
+            </div>
+          </div>
+      </div>
       ) : null}
 
-      {preview && !editing ? (
-        <>
-          <DecisionAgentPreviewCard
-            preview={preview}
-            savedSlug={savedSlug}
-            saving={saving}
-            deploying={deploying}
-            deployMessage={deployMessage}
-            saveError={saveError}
-            onTest={() => setShowTest(true)}
-            onDeploy={() => void handleDeploy()}
-            onEdit={() => setEditing(true)}
-            onSave={() => void handleSave()}
-          />
-          {showTest ? (
-            <DecisionAgentInlineTest
+      {preview && phase === "workflow" ? (
+        <div className="studio-workflow">
+          <header className="studio-workflow-top">
+            <div className="studio-workflow-title">
+              <button type="button" className="studio-back" onClick={() => setPhase("prompt")}>
+                Prompt
+              </button>
+              <div>
+                <p className="studio-kicker">Editable workflow</p>
+                <h1>{preview.name}</h1>
+              </div>
+            </div>
+            <div className="zdec-wf-footer">
+              <button type="button" className="studio-ghost" onClick={() => setPhase("prompt")}>
+                Edit prompt
+              </button>
+              <button
+                type="button"
+                className="studio-ghost"
+                disabled={saving || Boolean(savedSlug)}
+                onClick={() => void handleSave()}
+              >
+                {saving ? "Saving…" : savedSlug ? "Saved" : "Save draft"}
+              </button>
+              <button
+                type="button"
+                className="studio-primary"
+                disabled={saving}
+                onClick={() => void handleConfirm()}
+              >
+                Confirm workflow
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </header>
+          <div className="studio-workflow-canvas">
+            <DecisionWorkflowCanvas
               config={preview.config}
-              slug={savedSlug}
-              onClose={() => setShowTest(false)}
+              onChange={(config) => setPreview({ ...preview, config })}
             />
-          ) : null}
-          {savedSlug ? (
-            <p className="zdec-post-save">
-              Agent saved.{" "}
-              <Link href="/decision-agents">View all agents</Link> or create another below.
+          </div>
+          {error ? (
+            <p className="studio-error studio-error-bar" role="alert">
+              {error}
             </p>
           ) : null}
-        </>
+        </div>
+      ) : null}
+
+      {preview && phase === "run" ? (
+        <div className="zdec-studio">
+          <ol className="prep-stepper">
+            <li className="is-done">Prompt</li>
+            <li className="is-done">Workflow</li>
+            <li className="is-active">Live decisions</li>
+          </ol>
+          <div className="zdec-run-phase">
+            <p className="studio-kicker">{preview.name}</p>
+            <h1>Run live decisions</h1>
+            <p className="studio-lead">
+              Enter case facts, then run the agents. Wave opens a dedicated report page and will not
+              invent ALLOW outcomes or IPO figures.
+            </p>
+            <DecisionLiveRun
+              config={preview.config}
+              slug={savedSlug}
+              title={preview.name}
+              purpose={preview.purpose}
+              backHref="/decision-agents/create"
+            />
+            <button type="button" className="run-back" onClick={() => setPhase("workflow")}>
+              Back to workflow
+            </button>
+          </div>
+        </div>
       ) : null}
     </PageShell>
   );

@@ -2,7 +2,7 @@ import type { AgentWorkflowGraph, WorkflowGraphNode } from "./types";
 
 const COL_X = 220;
 const ROW_Y = 36;
-const ROW_GAP = 168;
+const ROW_GAP = 210;
 
 export function ensureNodeCoordinates(node: WorkflowGraphNode, index: number): WorkflowGraphNode {
   return {

@@ -16,6 +16,8 @@ export async function createAgentResultNotification(
     runId: string | null;
     runAt?: string;
     timezone?: string;
+    executionStatus?: string;
+    templateName?: string;
   }
 ): Promise<NotificationRow> {
   const runAt = params.runAt ?? new Date().toISOString();
@@ -50,9 +52,12 @@ export async function createAgentResultNotification(
         agentSlug: params.agentSlug,
         summary: params.summary,
         recipientName: params.recipientName,
-        runMode: "scheduled",
+        runMode: "manual",
         runAt,
         timezone: params.timezone,
+        runId: params.runId ?? undefined,
+        executionStatus: params.executionStatus,
+        templateName: params.templateName ?? params.agentName,
       },
       sent_at: new Date().toISOString(),
       retry_count: 0,

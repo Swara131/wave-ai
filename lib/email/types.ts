@@ -68,6 +68,9 @@ export type EmailTemplatePayload = {
     runMode: string;
     runAt: string;
     timezone?: string;
+    runId?: string;
+    executionStatus?: string;
+    templateName?: string;
   };
 };
 

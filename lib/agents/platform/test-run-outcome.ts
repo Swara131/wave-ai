@@ -41,7 +41,7 @@ export function resolveTestRunOutcome(params: {
   if (params.runStatus === "awaiting_approval") {
     return {
       kind: "awaiting_approval",
-      success: true,
+      success: false,
       queryStatus,
       recordsProcessed: analysis?.analyzedCount ?? 0,
       analysis,

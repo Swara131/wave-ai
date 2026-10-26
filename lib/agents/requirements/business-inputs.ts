@@ -4,6 +4,7 @@ import type {
   RequirementDependency,
   RequirementInputType,
   RequirementKind,
+  RequirementScope,
 } from "./types";
 
 export type JobProfile =
@@ -15,6 +16,12 @@ export type JobProfile =
   | "refund"
   | "fraud"
   | "chatbot"
+  | "url_summary"
+  | "photo_concepts"
+  | "lighting_concierge"
+  | "travel_companion"
+  | "wedding_planner"
+  | "group_decision_planner"
   | "generic";
 
 export interface BusinessFieldSpec {
@@ -32,6 +39,7 @@ export interface BusinessFieldSpec {
   dependsOn?: RequirementDependency;
   validation?: AgentRequirement["validation"];
   kind?: RequirementKind;
+  scope?: RequirementScope;
 }
 
 export interface WorkflowJobHints {
@@ -43,6 +51,7 @@ export interface WorkflowJobHints {
   email: boolean;
   crm: boolean;
   news: boolean;
+  url: boolean;
 }
 
 export function extractWorkflowJobHints(graph: AgentWorkflowGraph | null | undefined): WorkflowJobHints {
@@ -59,11 +68,54 @@ export function extractWorkflowJobHints(graph: AgentWorkflowGraph | null | undef
     email: /\bemail|\boutput_email/.test(blob),
     crm: /\bcrm|\bupdate_crm/.test(blob),
     news: /\bnews|\bstories|\bdigest/.test(blob),
+    url: /\bfetch_url|\bsource_url|\byoutube/.test(blob),
   };
+}
+
+export function looksLikePhotoJob(text: string): boolean {
+  const t = text.toLowerCase();
+  const hasPhoto = /\b(photo|photos|image|picture|jpg|jpeg|png|upload)\b/.test(t);
+  const hasDesignJob =
+    /\b(venue|decorat|concept|design|styling|interior|event space|pricing page)\b/.test(t);
+  return hasPhoto && hasDesignJob;
+}
+
+export function looksLikeUrlSummaryJob(text: string, hints?: WorkflowJobHints): boolean {
+  const t = text.toLowerCase();
+  if (/\b(tickets?|helpdesk|help desk|crm|refund|fraud)\b/.test(t)) return false;
+  if (hints?.url) return true;
+  return (
+    /\b(youtube|youtu\.be|tiktok|instagram|vimeo|linkedin|facebook)\b/.test(t) ||
+    /\b(from (a |the )?(url|link)|paste (a |the )?link|platform link|video link)\b/.test(t) ||
+    (/\bsummar/.test(t) && /\b(url|link|video|article|blog|web\s*page|webpage|podcast)\b/.test(t))
+  );
 }
 
 export function inferJobProfile(text: string, hints: WorkflowJobHints): JobProfile {
   const t = text.toLowerCase();
+  if (looksLikePhotoJob(text)) return "photo_concepts";
+  if (
+    /\blighting concierge\b/.test(t) ||
+    (/\blighting\b/.test(t) && /\belectrician\b/.test(t))
+  ) {
+    return "lighting_concierge";
+  }
+  if (
+    /\bwedding (& |and )?celebration planner\b/.test(t) ||
+    /\bcelebration planner\b/.test(t)
+  ) {
+    return "wedding_planner";
+  }
+  if (/\bgroup decision planner\b/.test(t)) {
+    return "group_decision_planner";
+  }
+  if (
+    /\btravel companion\b/.test(t) ||
+    (/\bitinerary\b/.test(t) && /\btravel\b/.test(t))
+  ) {
+    return "travel_companion";
+  }
+  if (looksLikeUrlSummaryJob(text, hints)) return "url_summary";
   if (/\brefund\b/.test(t)) return "refund";
   if (/\bfraud\b/.test(t)) return "fraud";
   if (/\bwhatsapp\b/.test(t) && /\bticket/.test(t) && !/\bupdate customer records/.test(t)) {
@@ -103,6 +155,16 @@ function field(spec: BusinessFieldSpec): BusinessFieldSpec {
 
 export function businessFieldsForJob(profile: JobProfile): BusinessFieldSpec[] {
   if (profile === "sales_briefing") return salesBriefingFields();
+  if (
+    profile === "photo_concepts" ||
+    profile === "lighting_concierge" ||
+    profile === "travel_companion" ||
+    profile === "wedding_planner" ||
+    profile === "group_decision_planner"
+  ) {
+    return [];
+  }
+  if (profile === "url_summary") return urlSummaryFields();
   if (profile === "news_digest") return newsDigestFields();
   if (profile === "competitor_research") return competitorFields();
   if (profile === "crm_update") return crmFields();
@@ -688,6 +750,58 @@ function salesBriefingFields(): BusinessFieldSpec[] {
         { id: "custom", label: "Custom" },
       ],
       kind: "configuration",
+    }),
+  ];
+}
+
+function urlSummaryFields(): BusinessFieldSpec[] {
+  return [
+    field({
+      key: "source_url",
+      label: "Link to summarize",
+      description: "Paste a YouTube, article, or other public URL. Wave will read that page — it will not invent a summary.",
+      reason: "This agent needs a real link each time it runs.",
+      type: "url",
+      required: true,
+      section: "run_input",
+      sectionTitle: "What should this run summarize?",
+      sectionDescription: "Paste a public link. Wave fetches the page or video metadata and summarizes only what it can actually read.",
+      placeholder: "https://www.youtube.com/watch?v=…",
+      validation: "url",
+      kind: "business",
+      scope: "run",
+    }),
+    field({
+      key: "summary_focus",
+      label: "What should the summary emphasize?",
+      description: "Optional focus, such as key points, claims, or action items.",
+      reason: "Helps the summary match what you need without guessing extra facts.",
+      type: "textarea",
+      required: false,
+      section: "run_input",
+      sectionTitle: "What should this run summarize?",
+      sectionDescription: "Paste a public link. Wave fetches the page or video metadata and summarizes only what it can actually read.",
+      placeholder: "Key arguments and timestamps if available",
+      kind: "business",
+      scope: "run",
+    }),
+    field({
+      key: "summary_length",
+      label: "Summary length",
+      description: "How long the summary should be.",
+      reason: "Short and detailed summaries are different outputs.",
+      type: "choice",
+      required: true,
+      section: "run_input",
+      sectionTitle: "What should this run summarize?",
+      sectionDescription: "Paste a public link. Wave fetches the page or video metadata and summarizes only what it can actually read.",
+      options: [
+        { id: "short", label: "Short" },
+        { id: "standard", label: "Standard" },
+        { id: "detailed", label: "Detailed" },
+      ],
+      kind: "configuration",
+      scope: "run",
     }),
   ];
 }

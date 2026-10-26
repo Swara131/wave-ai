@@ -269,8 +269,22 @@ export default function AgentDetailPage() {
                 <AgentConfigurationCard config={agentConfig} />
                 <AgentActionsConfigCard
                   agentId={agentId}
-                  actions={agentConfig.actions}
-                  hasActions={agentConfig.hasActions}
+                  actions={
+                    agentConfig.templateSlug === "lighting-concierge" ||
+                    agentConfig.templateSlug === "travel-companion" ||
+                    agentConfig.templateSlug === "wedding-celebration-planner" ||
+                    agentConfig.templateSlug === "group-decision-planner"
+                      ? agentConfig.actions.filter((action) => action.id !== "send_email")
+                      : agentConfig.actions
+                  }
+                  hasActions={
+                    agentConfig.templateSlug === "lighting-concierge" ||
+                    agentConfig.templateSlug === "travel-companion" ||
+                    agentConfig.templateSlug === "wedding-celebration-planner" ||
+                    agentConfig.templateSlug === "group-decision-planner"
+                      ? agentConfig.actions.some((action) => action.id !== "send_email")
+                      : agentConfig.hasActions
+                  }
                 />
               </>
             ) : null}

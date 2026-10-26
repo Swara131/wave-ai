@@ -16,9 +16,9 @@ export default function LandingPage() {
       <main id="main-content">
         <Hero />
         <TrustStrip />
+        <LandingTemplateShowcase />
         <HowItWorks />
         <LandingWorkflowShowcase />
-        <LandingTemplateShowcase />
         <LandingSafetySection />
         <div id="pricing">
           <LandingPricing />

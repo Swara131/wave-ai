@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       apiKey: body.apiKey,
     });
 
-    return secureJson({ success: true, result });
+    return secureJson({ success: result.passed, result });
   } catch (err) {
     if (err instanceof ValidationError) {
       return secureError(err.message, 400, { details: err.details });

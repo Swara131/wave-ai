@@ -42,6 +42,17 @@ function parseStoredRiskReasons(value: unknown): StoredRiskReasons {
 }
 
 function buildTitle(row: ActionProposalRow): string {
+  const payload = row.action_payload ?? {};
+  const agentName =
+    typeof payload.agentName === "string" && payload.agentName.trim()
+      ? payload.agentName.trim()
+      : null;
+  if (row.tool_name === "activate_agent") {
+    return agentName ? `Activate ${agentName}` : "Activate agent";
+  }
+  if (agentName) {
+    return `${agentName}: ${row.tool_name} — ${row.action_type}`;
+  }
   return `${row.tool_name} — ${row.action_type}`;
 }
 
@@ -86,7 +97,10 @@ export function mapReviewProposalToPendingApproval(
   return {
     id: row.id,
     title: buildTitle(row),
-    agentId: row.agent_id,
+    agentId:
+      typeof row.action_payload?.agentName === "string" && row.action_payload.agentName.trim()
+        ? row.action_payload.agentName.trim()
+        : row.agent_id,
     riskSeverity,
     priority: severityToPriority(riskSeverity),
     aiExplanation:
@@ -129,6 +143,7 @@ export function mapReviewProposalToPendingApproval(
     slaDeadline: row.review_expires_at ?? row.expires_at,
     assignee: "Unassigned",
     requester: row.agent_id,
+    agentSlug: row.agent_id,
     source: "gateway",
     toolName: row.tool_name,
     actionType: row.action_type,

@@ -7,6 +7,7 @@ interface BuilderClarifyPanelProps {
   onAnswer: (requirement: AgentRequirement, value: string) => void;
   onContinue: () => void;
   continuing?: boolean;
+  continueLabel?: string;
 }
 
 const ASK_TYPES = new Set(["choice", "email", "phone", "schedule"]);
@@ -16,6 +17,7 @@ export default function BuilderClarifyPanel({
   onAnswer,
   onContinue,
   continuing,
+  continueLabel,
 }: BuilderClarifyPanelProps) {
   const questions = result.requirements.filter(
     (item) => item.required && item.status === "missing" && ASK_TYPES.has(item.configurationType)
@@ -115,7 +117,11 @@ export default function BuilderClarifyPanel({
         disabled={continuing || questions.length > 0}
         onClick={onContinue}
       >
-        {continuing ? "Creating agent…" : questions.length > 0 ? "Answer the questions to continue" : "Create this agent"}
+        {continuing
+          ? "Creating agent…"
+          : questions.length > 0
+            ? "Answer the questions to continue"
+            : continueLabel ?? "Create this agent"}
       </button>
     </section>
   );

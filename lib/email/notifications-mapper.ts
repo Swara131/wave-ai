@@ -36,6 +36,43 @@ function mapChannel(channel: string): NotificationChannel {
   return "email";
 }
 
+export function notificationOpenHref(row: {
+  template_type: string | null;
+  template_payload: unknown;
+  approval_request_id: string | null;
+}): string | null {
+  const payload =
+    row.template_payload && typeof row.template_payload === "object"
+      ? (row.template_payload as Record<string, unknown>)
+      : {};
+  const slug = typeof payload.agentSlug === "string" ? payload.agentSlug.trim() : "";
+  const agentId = typeof payload.agentId === "string" ? payload.agentId.trim() : "";
+  if (row.template_type === "agent_result") {
+    const runId = typeof payload.runId === "string" ? payload.runId.trim() : "";
+    if (runId) return `/runs/${encodeURIComponent(runId)}`;
+    const id = slug || agentId;
+    if (id) return `/agents/${encodeURIComponent(id)}/result`;
+  }
+  if (row.approval_request_id) {
+    return `/approvals`;
+  }
+  if (row.template_type === "gateway_review_requested") {
+    return "/approvals";
+  }
+  return null;
+}
+
+function payloadSummary(row: NotificationRow): string {
+  const payload =
+    row.template_payload && typeof row.template_payload === "object"
+      ? (row.template_payload as Record<string, unknown>)
+      : {};
+  if (typeof payload.summary === "string" && payload.summary.trim()) {
+    return payload.summary.trim();
+  }
+  return row.preview;
+}
+
 export function mapNotificationRow(row: NotificationRow): NotificationItem {
   return {
     id: row.id,
@@ -49,8 +86,10 @@ export function mapNotificationRow(row: NotificationRow): NotificationItem {
     channel: mapChannel(row.channel),
     deliveryStatus: mapDeliveryStatus(row.delivery_status),
     subject: row.subject,
-    preview: row.preview,
+    preview: payloadSummary(row),
     retryCount: row.retry_count,
     maxRetries: row.max_retries,
+    templateType: row.template_type,
+    openHref: notificationOpenHref(row),
   };
 }

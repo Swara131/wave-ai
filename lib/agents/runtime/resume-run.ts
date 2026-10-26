@@ -9,7 +9,8 @@ import { AgentNotRunnableError } from "./errors";
 import { executeApprovedAction, revokeApprovalPassport } from "@/lib/safety/approval-gate/gate";
 import { resolveAgentMission } from "@/lib/safety/mission";
 import { markRunResuming, runAgentLoop } from "./run-loop";
-import { runPersistedWorkflow } from "./workflow-executor";
+import { agentHasPersistedWorkflow, runPersistedWorkflow } from "./workflow-executor";
+import { AGENT_ACTIVATE_TOOL } from "@/lib/agents/activation/approval";
 import type { ModelMessage, RunAgentResult } from "./types";
 import { updateAgentRun } from "../runtime-repository";
 
@@ -91,6 +92,9 @@ export async function resumeAgentRunAfterApproval(
   const pending = parsePendingApproval(run.metadata ?? {});
   if (!pending || pending.proposalId !== params.proposalId) {
     throw new AgentNotRunnableError("Approval details for this run could not be found.");
+  }
+  if (pending.toolName === AGENT_ACTIVATE_TOOL) {
+    return resumeAgentRunAfterActivation(supabase, params);
   }
 
   const agent = await loadAgentForRuntime(supabase, {
@@ -238,6 +242,85 @@ export async function resumeAgentRunAfterApproval(
   });
 }
 
+export async function resumeAgentRunAfterActivation(
+  supabase: SupabaseClient,
+  params: {
+    runId: string;
+    userId: string;
+    userEmail: string;
+    proposalId: string;
+  }
+): Promise<RunAgentResult> {
+  const admin = createAdminClient();
+  const run = await getAgentRunById(supabase, {
+    runId: params.runId,
+    userId: params.userId,
+  });
+
+  if (!run) {
+    throw new AgentNotRunnableError("Agent run not found.");
+  }
+
+  if (run.status !== "awaiting_approval") {
+    throw new AgentNotRunnableError("This agent run is not waiting for approval.");
+  }
+
+  const pending = parsePendingApproval(run.metadata ?? {});
+  if (pending && pending.proposalId !== params.proposalId) {
+    throw new AgentNotRunnableError("Approval details for this run could not be found.");
+  }
+
+  const agent = await loadAgentForRuntime(supabase, {
+    agentDbId: run.agentId,
+    userId: params.userId,
+  });
+
+  const limits = resolveRuntimeLimits(agent.record);
+  const activity = new RuntimeActivityLogger(admin, agent, params.userId, limits);
+  const task =
+    typeof run.metadata?.task === "string"
+      ? run.metadata.task
+      : "Continue approved agent action";
+
+  await markRunResuming(admin, {
+    runId: params.runId,
+    userId: params.userId,
+    metadata: {
+      ...run.metadata,
+      pendingApproval: null,
+    },
+  });
+
+  await activity.logRunStep({
+    runId: params.runId,
+    key: "agent.activation.approved",
+    label: "You approved this agent",
+    detail: agent.record.name,
+  });
+
+  if (agentHasPersistedWorkflow(agent)) {
+    return runPersistedWorkflow({
+      admin,
+      agent,
+      userId: params.userId,
+      task,
+      runId: params.runId,
+      limits,
+      activity,
+    });
+  }
+
+  return runAgentLoop({
+    admin,
+    agent,
+    userId: params.userId,
+    task,
+    runId: params.runId,
+    limits,
+    activity,
+  });
+}
+
 export async function cancelAgentRunAfterRejection(
   supabase: SupabaseClient,
   params: {
@@ -258,11 +341,13 @@ export async function cancelAgentRunAfterRejection(
   }
 
   const pending = parsePendingApproval(run.metadata ?? {});
-  if (!pending || pending.proposalId !== params.proposalId) {
+  if (pending && pending.proposalId !== params.proposalId) {
     return;
   }
 
-  await revokeApprovalPassport(admin, pending.passportId);
+  if (pending && !pending.passportId.startsWith("activation:")) {
+    await revokeApprovalPassport(admin, pending.passportId);
+  }
 
   try {
     const agent = await loadAgentForRuntime(supabase, {

@@ -6,7 +6,7 @@ import {
   AiAgentBuilderError,
   formatGroqError,
 } from "./errors";
-import { getGroqApiKey, getGroqModel } from "./env";
+import { getGroqApiKey, getGroqModel, getGroqVisionModels } from "./env";
 
 let groqClient: Groq | undefined;
 
@@ -59,4 +59,48 @@ export async function groqJsonCompletion(
   } catch (err) {
     throw formatGroqError(err, kind);
   }
+}
+
+export async function groqVisionJsonCompletion(params: {
+  system: string;
+  prompt: string;
+  mimeType: string;
+  base64: string;
+  temperature?: number;
+}): Promise<string> {
+  const groq = getGroqClient();
+  const dataUrl = `data:${params.mimeType};base64,${params.base64}`;
+
+  let lastError: unknown;
+  for (const model of getGroqVisionModels()) {
+    try {
+      const response = await groq.chat.completions.create({
+        model,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: `${params.system}\n\n${params.prompt}` },
+              { type: "image_url", image_url: { url: dataUrl } },
+            ],
+          },
+        ],
+        temperature: params.temperature ?? 0.2,
+        max_completion_tokens: 2048,
+      });
+      const message = response.choices[0]?.message;
+      const content =
+        message?.content?.trim() ||
+        (typeof (message as { reasoning?: string } | undefined)?.reasoning === "string"
+          ? (message as { reasoning?: string }).reasoning?.trim()
+          : "");
+      if (content) return content;
+      lastError = new AiAgentBuilderError("Groq vision returned an empty response.");
+    } catch (err) {
+      lastError = err;
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn("[runtime] Groq vision model failed:", model, message.slice(0, 240));
+    }
+  }
+  throw formatGroqError(lastError, "agent-builder");
 }

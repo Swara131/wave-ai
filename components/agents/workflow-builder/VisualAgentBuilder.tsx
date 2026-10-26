@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
-import WorkflowEditorCanvas from "@/components/agents/workflow-builder/WorkflowEditorCanvas";
-import WorkflowValidationBar from "@/components/agents/workflow-builder/WorkflowValidationBar";
 import type { AgentInterpretation } from "@/lib/agents/builder-types";
 import { interpretationToDraftInput } from "@/lib/agents/save-builder-agent-draft";
 import { generateWorkflowFromInterpretation } from "@/lib/agents/workflow/generate-from-interpretation";
@@ -16,13 +14,12 @@ import type {
   WorkflowValidationResult,
 } from "@/lib/agents/workflow/types";
 import { readJsonResponse } from "@/lib/ux/fetch-json";
-import { FLOW_ERRORS, FLOW_LOADING } from "@/lib/ux/flow-copy";
-import BuilderClarifyPanel from "@/components/agents/workflow-builder/BuilderClarifyPanel";
-import AgentRuntimeConsole from "@/components/agents/runtime/AgentRuntimeConsole";
-import AgentLiveRunPanel, {
-  pollLatestRunSteps,
-  type LiveRunStep,
-} from "@/components/agents/runtime/AgentLiveRunPanel";
+import { FLOW_ERRORS } from "@/lib/ux/flow-copy";
+import AgentPromptStudio, {
+  type PromptStudioPhase,
+} from "@/components/agents/studio/AgentPromptStudio";
+import AgentWorkflowStudio from "@/components/agents/studio/AgentWorkflowStudio";
+import { type LiveRunStep } from "@/components/agents/runtime/AgentLiveRunPanel";
 import { getAgentRequirements } from "@/lib/agents/requirements/engine";
 import { snapshotFromLiveDraft } from "@/lib/agents/requirements/from-agent";
 import {
@@ -30,8 +27,6 @@ import {
   type AgentRequirement,
   type RequirementChoices,
 } from "@/lib/agents/requirements/types";
-import { matchWorkflowNodeToStep } from "@/lib/agents/workflow/run-status";
-import type { RunAgentResult } from "@/lib/agents/runtime/types";
 
 const MIN_PROMPT_LENGTH = 15;
 const CLARIFY_ASK_TYPES = new Set(["choice", "email", "phone", "schedule"]);
@@ -47,7 +42,11 @@ function hasBlockingClarifyQuestions(requirements: AgentRequirement[] | undefine
   );
 }
 
-export default function VisualAgentBuilder() {
+export default function VisualAgentBuilder({
+  variant = "create",
+}: {
+  variant?: "create" | "workflow";
+}) {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
@@ -77,10 +76,9 @@ export default function VisualAgentBuilder() {
   const [destinationEmail, setDestinationEmail] = useState<string | null>(null);
   const [destinationPhone, setDestinationPhone] = useState<string | null>(null);
   const [pendingCreate, setPendingCreate] = useState(false);
-  const [liveSteps, setLiveSteps] = useState<LiveRunStep[]>([]);
-  const [liveRunning, setLiveRunning] = useState(false);
-  const [liveResult, setLiveResult] = useState<RunAgentResult | null>(null);
-  const [liveError, setLiveError] = useState<string | null>(null);
+  const [liveSteps] = useState<LiveRunStep[]>([]);
+  const [studioPhase, setStudioPhase] = useState<PromptStudioPhase>("prompt");
+  const [processStep, setProcessStep] = useState(0);
 
   const saveTimer = useRef<number | null>(null);
 
@@ -291,11 +289,24 @@ export default function VisualAgentBuilder() {
     }
   }, [editSlug, loadExistingAgent]);
 
+  useEffect(() => {
+    if (studioPhase !== "processing") return;
+    if (processStep >= 3) return;
+    const timer = window.setTimeout(() => {
+      setProcessStep((index) => Math.min(index + 1, 3));
+    }, 520);
+    return () => window.clearTimeout(timer);
+  }, [studioPhase, processStep]);
+
   const generateFromPrompt = async (description: string) => {
     if (description.trim().length < MIN_PROMPT_LENGTH) return;
 
     setGenerating(true);
     setError(null);
+    if (variant === "create") {
+      setStudioPhase("processing");
+      setProcessStep(0);
+    }
 
     try {
       let nextInterpretation: AgentInterpretation | null = null;
@@ -337,12 +348,16 @@ export default function VisualAgentBuilder() {
       const needsAnswers = hasBlockingClarifyQuestions(preview.requirements);
       if (needsAnswers) {
         setPendingCreate(true);
+        if (variant === "create") setStudioPhase("questions");
+        else setError("This change needs extra details. Return to the prompt step to answer them.");
         return;
       }
 
       await commitAgent(nextInterpretation, graph);
+      if (variant === "create") setStudioPhase("continue");
     } catch (err) {
       setError(err instanceof Error ? err.message : FLOW_ERRORS.createAgent);
+      if (variant === "create") setStudioPhase(pendingCreate ? "questions" : "prompt");
     } finally {
       setGenerating(false);
     }
@@ -428,6 +443,7 @@ export default function VisualAgentBuilder() {
     setError(null);
     try {
       await commitAgent(interpretation, workflowGraph);
+      if (variant === "create") setStudioPhase("continue");
     } catch (err) {
       setError(err instanceof Error ? err.message : FLOW_ERRORS.createAgent);
     } finally {
@@ -475,23 +491,19 @@ export default function VisualAgentBuilder() {
     }
   };
 
-  const handlePublish = async () => {
+  const handleConfirmWorkflow = async () => {
     setPublishing(true);
     setError(null);
     try {
       const slug = await ensureSavedSlug();
       if (!slug) return;
-      const response = await fetch(
-        `/api/v1/agents/${encodeURIComponent(slug)}/workflow/publish`,
-        { method: "POST" }
-      );
-      const payload = await readJsonResponse<{ slug?: string; error?: string }>(response);
-      if (!response.ok || !payload.slug) {
-        throw new Error(payload.error ?? "Could not publish agent.");
+      if (workflowGraph) {
+        const saved = await persistWorkflow(workflowGraph, slug);
+        if (!saved) return;
       }
-      router.push(`/agents/${encodeURIComponent(payload.slug)}/prepare`);
+      router.push(`/agents/${encodeURIComponent(slug)}/prepare`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not publish agent.");
+      setError(err instanceof Error ? err.message : "Could not confirm workflow.");
     } finally {
       setPublishing(false);
     }
@@ -540,271 +552,67 @@ export default function VisualAgentBuilder() {
 
   if (loading) {
     return (
-      <p className="wfb-loading">
+      <p className="studio-loading">
         <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-        Loading agent builder…
+        Loading…
       </p>
     );
   }
 
+  if (variant === "create") {
+    return (
+      <AgentPromptStudio
+        prompt={prompt}
+        onPromptChange={setPrompt}
+        phase={studioPhase}
+        processStep={processStep}
+        generating={generating}
+        error={error}
+        interpretation={interpretation}
+        requirements={liveRequirements}
+        nodeCount={workflowGraph?.nodes.length ?? 0}
+        onGenerate={() => void generateFromPrompt(prompt)}
+        onAnswer={handleClarifyAnswer}
+        onContinueClarify={() => void handleClarifyContinue()}
+        onOpenWorkflow={() => {
+          if (!agentSlug) return;
+          router.push(`/agents/${encodeURIComponent(agentSlug)}/workflow`);
+        }}
+      />
+    );
+  }
+
   return (
-    <>
-      <div className="wfb-builder">
-        <section className="wfb-panel wfb-panel-left" aria-label="Agent builder">
-          <h1 className="wfb-title">Agent Builder</h1>
-          <p className="wfb-lead">What do you want your agent to do?</p>
-
-          <label className="wfb-prompt-field" htmlFor="wfb-prompt">
-            <textarea
-              id="wfb-prompt"
-              className="wfb-prompt ds-input"
-              value={prompt}
-              onChange={(event) => setPrompt(event.target.value)}
-              placeholder="Create an agent that finds the latest AI news every morning, summarizes the top 5 stories, and emails me."
-              rows={8}
-              disabled={generating}
-            />
-          </label>
-
-          <button
-            type="button"
-            className="wfb-btn wfb-btn-primary wfb-generate-btn"
-            disabled={generating || prompt.trim().length < MIN_PROMPT_LENGTH}
-            onClick={() => void generateFromPrompt(prompt)}
-          >
-            {generating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                {FLOW_LOADING.interpretingAgent}
-              </>
-            ) : (
-              "Generate workflow"
-            )}
-          </button>
-
-          {pendingCreate && liveRequirements ? (
-            <BuilderClarifyPanel
-              result={liveRequirements}
-              onAnswer={handleClarifyAnswer}
-              onContinue={() => void handleClarifyContinue()}
-              continuing={generating}
-            />
-          ) : null}
-
-          {workflowGraph ? (
-            <div className="wfb-nl-edit">
-              <p className="wfb-nl-label">Refine in plain language</p>
-              <textarea
-                className="ds-input"
-                rows={2}
-                value={nlEdit}
-                onChange={(event) => setNlEdit(event.target.value)}
-                placeholder='e.g. "Also send the summary to Slack"'
-              />
-              <button
-                type="button"
-                className="wfb-btn wfb-btn-secondary"
-                disabled={!nlEdit.trim() || generating}
-                onClick={() => void applyNaturalLanguageEdit()}
-              >
-                Update from prompt
-              </button>
-              <p className="wfb-nl-note">
-                Natural-language edits re-run interpretation and regenerate the workflow while
-                keeping your agent draft.
-              </p>
-            </div>
-          ) : null}
-
-          {interpretation ? (
-            <div className="wfb-plan ds-panel">
-              <h2>Auto-generated plan</h2>
-              <p>{interpretation.goal}</p>
-              <ul>
-                {interpretation.capabilities.map((capability) => (
-                  <li key={capability.id}>{capability.label}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          {error ? (
-            <p className="wfb-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-
-          {saving ? <p className="wfb-saving">Saving draft…</p> : null}
-        </section>
-
-        <section className="wfb-panel wfb-panel-right" aria-label="Workflow canvas">
-          <div className="wfb-panel-right-header">
-            <h2>Workflow</h2>
-            {workflowState?.draft ? (
-              <span className="wfb-draft-badge">Draft changes</span>
-            ) : null}
-            {dirty ? <span className="wfb-draft-badge">Unsaved</span> : null}
-          </div>
-
-          <WorkflowEditorCanvas
-            graph={workflowGraph}
-            onChange={handleWorkflowChange}
-            agentSlug={agentSlug}
-            runStatuses={
-              workflowGraph
-                ? Object.fromEntries(
-                    workflowGraph.nodes.map((node) => [
-                      node.id,
-                      matchWorkflowNodeToStep(
-                        node,
-                        liveSteps.map((step) => ({
-                          key: step.key,
-                          label: step.label,
-                          detail: step.detail ?? null,
-                          status: step.status,
-                        }))
-                      ),
-                    ])
-                  )
-                : undefined
-            }
-          />
-
-          <WorkflowValidationBar
-            validation={validation}
-            safetyDiff={safetyDiff}
-            hasDraft={Boolean(workflowState?.draft)}
-            unsaved={dirty}
-            verifying={verifying}
-            publishing={publishing}
-            reviewing={safetyReviewing}
-            safetyReviewedAt={workflowState?.safetyReviewedAt ?? null}
-            onVerify={() => void handleVerify()}
-            onSaveDraft={() => {
-              void (async () => {
-                if (!workflowGraph) return;
-                const slug = await ensureSavedSlug();
-                if (slug) await persistWorkflow(workflowGraph, slug);
-              })();
-            }}
-            onDiscard={() => void handleDiscardDraft()}
-            onPublish={() => void handlePublish()}
-            onSafetyReview={() => void handleSafetyReview()}
-          />
-        </section>
-      </div>
-
-      {agentSlug ? (
-        <div className="wfb-runtime">
-          <section className="wfb-panel" aria-label="What this agent needs">
-            <h2>What your agent needs</h2>
-            {liveRequirements ? (
-              <ul className="wfb-req-list">
-                {liveRequirements.requirements
-                  .filter((item) => item.required)
-                  .slice(0, 8)
-                  .map((item) => (
-                    <li key={item.key}>
-                      {item.status === "ready" ? "✓" : "⚠"} {item.label}
-                    </li>
-                  ))}
-              </ul>
-            ) : null}
-            <a className="wfb-btn wfb-btn-secondary" href={`/agents/${encodeURIComponent(agentSlug)}/prepare`}>
-              Configure
-            </a>
-          </section>
-
-          <section className="wfb-panel" aria-label="Test your agent">
-            <h2>Test your agent</h2>
-            <button
-              type="button"
-              className="wfb-btn wfb-btn-primary"
-              disabled={liveRunning}
-              onClick={() => {
-                void (async () => {
-                  const req = await fetch(
-                    `/api/v1/agents/${encodeURIComponent(agentSlug)}/requirements?stage=test`
-                  );
-                  const payload = (await req.json()) as { ready?: boolean };
-                  if (!payload.ready) {
-                    router.push(`/agents/${encodeURIComponent(agentSlug)}/prepare`);
-                    return;
-                  }
-                  setLiveRunning(true);
-                  setLiveError(null);
-                  setLiveResult(null);
-                  const poll = window.setInterval(() => {
-                    void pollLatestRunSteps(agentSlug).then(setLiveSteps);
-                  }, 900);
-                  try {
-                    const response = await fetch(
-                      `/api/v1/agents/${encodeURIComponent(agentSlug)}/run`,
-                      {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          task: interpretation?.goal || prompt || "Run a live test of this agent.",
-                          mode: "test",
-                        }),
-                      }
-                    );
-                    const body = (await response.json()) as {
-                      result?: RunAgentResult;
-                      error?: string;
-                      preparePath?: string;
-                    };
-                    if (response.status === 409 && body.preparePath) {
-                      router.push(body.preparePath);
-                      return;
-                    }
-                    if (!response.ok || !body.result) {
-                      throw new Error(body.error ?? "Live test failed.");
-                    }
-                    setLiveResult(body.result);
-                    setLiveSteps(
-                      (body.result.steps ?? []).map((step) => ({
-                        key: step.key,
-                        label: step.label,
-                        detail: step.detail,
-                        status: step.status,
-                      }))
-                    );
-                  } catch (err) {
-                    setLiveError(err instanceof Error ? err.message : "Live test failed.");
-                  } finally {
-                    window.clearInterval(poll);
-                    setLiveRunning(false);
-                  }
-                })();
-              }}
-            >
-              Run live test
-            </button>
-            <AgentLiveRunPanel
-              running={liveRunning}
-              steps={liveSteps}
-              result={liveResult}
-              error={liveError}
-              onRetry={() => setLiveResult(null)}
-            />
-          </section>
-
-          <AgentRuntimeConsole
-            agentSlug={agentSlug}
-            onSteps={setLiveSteps}
-          />
-
-          <section className="wfb-panel wfb-actions-row">
-            <a className="wfb-btn wfb-btn-secondary" href={`/agents/${encodeURIComponent(agentSlug)}/safety`}>
-              Protect
-            </a>
-            <a className="wfb-btn wfb-btn-secondary" href={`/agents/${encodeURIComponent(agentSlug)}/deploy`}>
-              Deploy
-            </a>
-          </section>
-        </div>
-      ) : null}
-    </>
+    <AgentWorkflowStudio
+      agentSlug={agentSlug}
+      interpretation={interpretation}
+      workflowGraph={workflowGraph}
+      workflowState={workflowState}
+      validation={validation}
+      safetyDiff={safetyDiff}
+      dirty={dirty}
+      saving={saving}
+      verifying={verifying}
+      publishing={publishing}
+      safetyReviewing={safetyReviewing}
+      error={error}
+      liveSteps={liveSteps}
+      nlEdit={nlEdit}
+      onNlEditChange={setNlEdit}
+      onApplyNlEdit={() => void applyNaturalLanguageEdit()}
+      generating={generating}
+      onWorkflowChange={handleWorkflowChange}
+      onVerify={() => void handleVerify()}
+      onSaveDraft={() => {
+        void (async () => {
+          if (!workflowGraph) return;
+          const slug = await ensureSavedSlug();
+          if (slug) await persistWorkflow(workflowGraph, slug);
+        })();
+      }}
+      onDiscard={() => void handleDiscardDraft()}
+      onConfirm={() => void handleConfirmWorkflow()}
+      onSafetyReview={() => void handleSafetyReview()}
+    />
   );
 }

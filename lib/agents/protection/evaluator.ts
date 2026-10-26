@@ -85,7 +85,13 @@ function applyToolAndSignalOverrides(params: {
   }
 
   if (decision === "ALLOW") {
-    const hasHighSignal = params.signals.some((signal) => signal.severity === "high");
+    const hasHighSignal = params.signals.some((signal) => {
+      if (signal.severity !== "high") return false;
+      if (params.matchedCount > 0 && signal.code === "financial.amount.present") {
+        return false;
+      }
+      return true;
+    });
     if (hasHighSignal) {
       decision = "REVIEW";
     }
@@ -105,6 +111,7 @@ function applyToolAndSignalOverrides(params: {
       "query_supabase",
       "google_sheets",
       "x_search",
+      "fetch_url",
     ]);
     if (readOnlyTools.has(params.toolName)) {
       decision = "ALLOW";

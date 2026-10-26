@@ -1,4 +1,5 @@
 import { parseDeliverySettings } from "@/lib/agents/delivery/settings";
+import { extractHttpUrl } from "@/lib/http/outbound-url";
 import { activeWorkflowGraph, readWorkflowState } from "@/lib/agents/workflow/persistence";
 import type { AgentWorkflowGraph } from "@/lib/agents/workflow/types";
 import type { AgentSafetySettings, BuilderAgentRecord } from "@/lib/agents/runtime-types";
@@ -19,6 +20,8 @@ const SKIP_SETUP_KEYS = new Set([
   "briefing_format",
   "story_count",
   "summary_length",
+  "venue_photo",
+  "venue_notes",
   "research_depth",
   "research_company",
   "research_contact",
@@ -92,7 +95,36 @@ export function deriveExecutableTaskFromSetup(params: {
     .replace(/^make an agent that\s*/i, "")
     .trim();
 
-  return stripped.endsWith(".") ? stripped : `${stripped}.`;
+  const sourceUrl =
+    params.setupAnswers?.source_url?.trim() || extractHttpUrl(stripped) || "";
+  const withUrl = sourceUrl
+    ? `${stripped.endsWith(".") ? stripped : `${stripped}.`} Source URL: ${sourceUrl}. Fetch that link and summarize only content that was actually retrieved. If the page or transcript cannot be read, say so. Do not invent tickets, quotes, or facts.`
+    : stripped.endsWith(".")
+      ? stripped
+      : `${stripped}.`;
+  return withUrl;
+}
+
+export function mergeRunInputsIntoAgent(
+  agent: BuilderAgentRecord,
+  runInputs: Record<string, string> | undefined
+): BuilderAgentRecord {
+  if (!runInputs || Object.keys(runInputs).length === 0) return agent;
+  const cleaned: Record<string, string> = {};
+  for (const [key, value] of Object.entries(runInputs)) {
+    if (value?.trim()) cleaned[key] = value.trim();
+  }
+  if (Object.keys(cleaned).length === 0) return agent;
+  return {
+    ...agent,
+    safetySettings: {
+      ...agent.safetySettings,
+      setupAnswers: {
+        ...(agent.safetySettings?.setupAnswers ?? {}),
+        ...cleaned,
+      },
+    },
+  };
 }
 
 export function buildRuntimePlanPrompt(params: {

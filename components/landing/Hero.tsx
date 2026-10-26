@@ -38,7 +38,7 @@ export default function Hero() {
             <Link href="/signup" className="landing-cta-primary rounded-full px-5 py-2.5 text-sm font-semibold">
               Build an agent free
             </Link>
-            <Link href="/dashboard/templates" className="landing-cta-secondary rounded-full px-5 py-2.5 text-sm font-semibold">
+            <Link href="#templates" className="landing-cta-secondary rounded-full px-5 py-2.5 text-sm font-semibold">
               Explore templates
             </Link>
           </div>

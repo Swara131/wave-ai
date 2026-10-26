@@ -18,7 +18,7 @@ export default function CTASection() {
           <Link href="/signup" className="landing-cta-primary rounded-full px-5 py-2.5 text-sm font-semibold">
             Build your first agent
           </Link>
-          <Link href="/dashboard/templates" className="landing-cta-secondary rounded-full px-5 py-2.5 text-sm font-semibold">
+          <Link href="/#templates" className="landing-cta-secondary rounded-full px-5 py-2.5 text-sm font-semibold">
             View templates
           </Link>
         </div>

@@ -22,9 +22,47 @@ export interface DecisionWorkflowNode {
   name: string;
   description: string;
   position: number;
+  x?: number;
+  y?: number;
+}
+
+export interface DecisionWorkflowEdge {
+  id: string;
+  source: string;
+  target: string;
+  label?: string;
 }
 
 export type DecisionRiskLevel = "low" | "medium" | "high";
+
+export type DecisionInputKind = "text" | "textarea" | "number" | "boolean" | "choice";
+
+export interface DecisionInputField {
+  key: string;
+  label: string;
+  type: DecisionInputKind;
+  required: boolean;
+  description: string;
+  options?: { id: string; label: string }[];
+}
+
+/** One named decision this agent makes. A multiple-decision agent has several. */
+export interface DecisionUnit {
+  id: string;
+  title: string;
+  description: string;
+  inputs: string[];
+  rules: DecisionRule[];
+}
+
+export interface DecisionUnitResult {
+  id: string;
+  title: string;
+  outcome: DecisionOutcome;
+  reasoning: string;
+  matchedRuleId: string | null;
+  missingInputs: string[];
+}
 
 export interface DecisionAgentConfig {
   decisionQuestion: string;
@@ -33,11 +71,14 @@ export interface DecisionAgentConfig {
   actions: string[];
   approvalWhen: string;
   workflow: DecisionWorkflowNode[];
+  edges?: DecisionWorkflowEdge[];
   aiReasoningEnabled: boolean;
   riskLevel?: DecisionRiskLevel;
   approvalLevel?: string;
   possibleOutcomes?: DecisionOutcome[];
   generatedAt?: string;
+  inputFields?: DecisionInputField[];
+  decisions?: DecisionUnit[];
 }
 
 /** Preview returned from generate — not persisted until Save. */

@@ -1,6 +1,8 @@
 import type { RunDeliveryRecord } from "../delivery/types";
 import type { BuilderAgentRecord } from "../runtime-types";
 import type { RecordAnalysisResult } from "./analysis/record-validation";
+import type { SourceImage } from "./source-image";
+import type { ConceptImage } from "./concept-image";
 
 /** Loaded agent ready for execution. */
 export interface LoadedAgent {
@@ -109,6 +111,8 @@ export interface RunAgentParams {
   task: string;
   mode?: "manual" | "test" | "scheduled" | "live";
   triggerSource?: string;
+  runInputs?: Record<string, string>;
+  sourceImage?: SourceImage;
 }
 
 export interface RunAgentResult {
@@ -121,6 +125,12 @@ export interface RunAgentResult {
   turns: number;
   steps: RuntimeStepSummary[];
   analysis?: RecordAnalysisResult;
+  conceptImages?: ConceptImage[];
+  generationError?: string;
+  generationProvider?: string;
+  generationModel?: string;
+  generationErrorKind?: string;
+  generationRetryable?: boolean;
   delivery?: RunDeliveryRecord;
   protection?: {
     summary?: string;

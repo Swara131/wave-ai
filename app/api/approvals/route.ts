@@ -8,6 +8,7 @@ import { recordAudit } from "@/lib/audit/logger";
 import { ProposalError } from "@/lib/gateway/errors";
 import { listGatewayPendingApprovals } from "@/lib/gateway/proposals/human-decision";
 import { ensureOrganization } from "@/lib/organizations/ensure-organization";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { parseOptionalJsonBody, secureError } from "@/lib/security/api";
 import { ValidationError } from "@/lib/security/errors";
@@ -30,7 +31,8 @@ export async function GET() {
       user.email ?? "user@local"
     );
 
-    const approvals = await listGatewayPendingApprovals(supabase, organizationId);
+    const admin = createAdminClient();
+    const approvals = await listGatewayPendingApprovals(admin, organizationId);
 
     return NextResponse.json({ approvals });
   } catch (err) {

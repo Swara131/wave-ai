@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Bell, BellOff, CheckCheck } from "lucide-react";
 import PageShell from "@/components/ui/PageShell";
 import PageHeader from "@/components/ui/PageHeader";
@@ -26,6 +27,7 @@ async function fetchNotifications(): Promise<NotificationItem[]> {
 }
 
 export default function NotificationsPage() {
+  const router = useRouter();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -206,7 +208,16 @@ export default function NotificationsPage() {
               notification={notification}
               index={index}
               onRetry={handleRetry}
-              onPreview={setPreview}
+              onPreview={(item) => {
+                if (item.status === "unread") {
+                  void handleMarkRead(item.id);
+                }
+                if (item.openHref) {
+                  router.push(item.openHref);
+                  return;
+                }
+                setPreview(item);
+              }}
               onMarkRead={handleMarkRead}
             />
           ))}

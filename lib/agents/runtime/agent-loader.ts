@@ -37,7 +37,8 @@ function buildSystemPrompt(agent: BuilderAgentRecord, enabledTools: string[]): s
     '{"type":"complete","message":"final deliverable for the user","reasoning":"optional"}',
     '{"type":"tool_call","toolName":"tool_id","toolInput":{},"actionType":"optional","reasoning":"why"}',
     "Execution rules:",
-    "- ALWAYS use tools to gather real data before completing research, news, email, lookup, ticket, or database tasks.",
+    "- ALWAYS use tools to gather real data before completing research, news, link summaries, email, lookup, ticket, or database tasks.",
+    "- If a source URL is provided or fetch_url is enabled, call fetch_url first. Never summarize a YouTube video, article, or page you did not fetch.",
     "- NEVER repeat the user's prompt, saved configuration, or say Completed: ... as your final answer.",
     "- NEVER invent tickets, evidence, IDs, or findings. If the database is empty or disconnected, say so.",
     "- Your final message must be the actual result (summary, report, list, draft, etc.).",
@@ -46,7 +47,8 @@ function buildSystemPrompt(agent: BuilderAgentRecord, enabledTools: string[]): s
     "- If research tools did not return current information, say that clearly instead of guessing.",
     "- Use tool_call when you need fresh information or to perform an action.",
     "- Never invent tools. Never bypass Wave Protection.",
-    "- Use saved configuration values (email, WhatsApp, company, schedule) instead of inventing destinations."
+    "- Use saved configuration values (email, WhatsApp, company, schedule) instead of inventing destinations.",
+    "- For read_document, pass {\"documentId\":\"latest\"} unless the user named a specific upload. Do not invent upload IDs."
   );
 
   return parts.join("\n");

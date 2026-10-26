@@ -141,6 +141,8 @@ export function generateWorkflowFromPromptFallback(prompt: string): AgentWorkflo
   }
 
   const wantsEmail = /\bemail|\bmail/.test(trimmed.toLowerCase());
+  const wantsLink =
+    /\byoutube|\byoutu\.be|\btiktok|\binstagram|\bvideo|\burl|\blink/.test(trimmed.toLowerCase());
   const wantsSearch = /\bsearch|\bresearch|\bnews|\bweb/.test(trimmed.toLowerCase());
   const nodes: WorkflowGraphNode[] = [
     node({
@@ -163,7 +165,19 @@ export function generateWorkflowFromPromptFallback(prompt: string): AgentWorkflo
     }),
   ];
 
-  if (wantsSearch) {
+  if (wantsLink) {
+    nodes.push(
+      node({
+        id: nid("tool", 0),
+        type: "tool",
+        category: "tool",
+        name: "Read link",
+        description: "Fetch the YouTube or web page the user provides",
+        config: { toolName: "fetch_url", permissionLevel: "read_only" },
+        position: nodes.length,
+      })
+    );
+  } else if (wantsSearch) {
     nodes.push(
       node({
         id: nid("tool", 0),

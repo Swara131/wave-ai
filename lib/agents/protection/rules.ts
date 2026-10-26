@@ -1,4 +1,8 @@
 import type { PolicyRuleDefinition } from "@/lib/gateway/policy/types";
+import { lightingProtectionPolicies } from "@/lib/lighting-concierge/policies";
+import { travelProtectionPolicies } from "@/lib/travel-companion/policies";
+import { weddingProtectionPolicies } from "@/lib/wedding-planner/policies";
+import { groupProtectionPolicies } from "@/lib/group-planner/policies";
 import type { AgentSafetySettings } from "../runtime-types";
 
 /** Practical Wave Protection rules for agent runtime actions. */
@@ -128,6 +132,10 @@ export function buildAgentSafetyPolicyRules(
         amountMin: Math.round(thresholdInr * 100) + 1,
       },
     });
+    rules.push(...lightingProtectionPolicies(thresholdInr));
+    rules.push(...travelProtectionPolicies(thresholdInr));
+    rules.push(...weddingProtectionPolicies(settings.weddingPlanner?.depositThresholdInr ?? thresholdInr));
+    rules.push(...groupProtectionPolicies(settings.groupPlanner?.reservationThresholdInr ?? thresholdInr));
   }
 
   for (const toolName of settings.requireApprovalFor ?? []) {

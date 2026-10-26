@@ -140,16 +140,17 @@ export function evaluateActionPure(params: EvaluateActionParams): SafetyEvaluati
   const policyId =
     missionValidation.violatedRule ?? primaryPolicy?.policyId ?? null;
 
-  let reason = missionValidation.reason || protection.reason;
-  if (
-    missionValidation.requiresApproval &&
-    missionValidation.violatedRule
-  ) {
+  const missionBlocked = !missionValidation.allowed;
+  const missionForcesApproval = Boolean(
+    missionValidation.requiresApproval && missionValidation.violatedRule
+  );
+  let reason = protection.reason;
+  if (missionBlocked || missionForcesApproval) {
     reason = missionValidation.reason;
   } else if (
     protection.matchedPolicies.length === 0 &&
     decision === "REQUIRE_APPROVAL" &&
-    !missionValidation.reason
+    !protection.reason
   ) {
     reason =
       "No explicit policy matched this action. Wave requires approval before proceeding (safe default).";

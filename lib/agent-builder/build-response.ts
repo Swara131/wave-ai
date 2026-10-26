@@ -68,6 +68,15 @@ const TOOL_LABELS: Record<AgentBuildParseResult["tools"][number], string> = {
   delete_crm_record: "Delete CRM record",
   query_database: "Query database",
   create_calendar_event: "Create calendar event",
+  create_service_quote: "Create service quote",
+  verify_service_address: "Verify service address",
+  request_electrician_visit: "Request electrician visit",
+  plan_travel_itinerary: "Plan travel itinerary",
+  request_travel_booking: "Request travel booking",
+  plan_wedding_event: "Plan wedding event",
+  request_wedding_deposit: "Request wedding deposit",
+  plan_group_outing: "Plan group outing",
+  request_group_reservation: "Request group reservation",
 };
 
 const TOOL_ACTION_TYPES: Record<AgentBuildParseResult["tools"][number], string> = {
@@ -79,6 +88,15 @@ const TOOL_ACTION_TYPES: Record<AgentBuildParseResult["tools"][number], string> 
   delete_crm_record: "crm.delete",
   query_database: "data.query",
   create_calendar_event: "calendar.create",
+  create_service_quote: "service.quote",
+  verify_service_address: "service.address_verify",
+  request_electrician_visit: "service.appointment_request",
+  plan_travel_itinerary: "travel.itinerary",
+  request_travel_booking: "travel.booking_request",
+  plan_wedding_event: "wedding.plan",
+  request_wedding_deposit: "wedding.deposit",
+  plan_group_outing: "group.plan",
+  request_group_reservation: "group.reservation",
 };
 
 const TOOL_ICONS: Record<AgentBuildParseResult["tools"][number], string> = {
@@ -90,6 +108,15 @@ const TOOL_ICONS: Record<AgentBuildParseResult["tools"][number], string> = {
   delete_crm_record: "🗑️",
   query_database: "🔍",
   create_calendar_event: "📅",
+  create_service_quote: "💡",
+  verify_service_address: "📍",
+  request_electrician_visit: "🔧",
+  plan_travel_itinerary: "🗺️",
+  request_travel_booking: "🎟️",
+  plan_wedding_event: "💍",
+  request_wedding_deposit: "💳",
+  plan_group_outing: "🍽️",
+  request_group_reservation: "📅",
 };
 
 function humanizeHyphenName(name: string): string {

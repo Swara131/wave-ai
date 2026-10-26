@@ -6,7 +6,10 @@ export type MarketplaceCategory =
   | "customer-support"
   | "operations-productivity"
   | "finance-commerce"
-  | "developer-ai-safety";
+  | "developer-ai-safety"
+  | "home-services"
+  | "travel-lifestyle"
+  | "events-planning";
 
 /** Includes legacy catalog categories so old template rows still type-check. */
 export type TemplateCategory =

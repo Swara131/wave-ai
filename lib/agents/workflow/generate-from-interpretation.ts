@@ -78,6 +78,8 @@ function inferToolStepDescription(toolName: string, goal: string): string {
       return "Google Sheets is no longer supported — use CSV upload instead";
     case "http_request":
       return "Call an external API";
+    case "fetch_url":
+      return "Open the provided link and read the real page or video metadata";
     case "issue_refund":
       return "Process refund requests within policy limits";
     case "send_whatsapp_message":
@@ -134,12 +136,15 @@ function outputNodeFromInterpretation(
 }
 
 function shouldInsertSummarizeStep(tools: string[], goal: string): boolean {
-  const hasSearch = tools.includes("web_search") || tools.includes("x_search");
+  const hasSource =
+    tools.includes("web_search") ||
+    tools.includes("x_search") ||
+    tools.includes("fetch_url");
   const hasEmailOrNotify =
     tools.includes("send_email") ||
     tools.includes("send_whatsapp_message") ||
     /\bsummar/i.test(goal);
-  return hasSearch && hasEmailOrNotify;
+  return hasSource && hasEmailOrNotify;
 }
 
 function linearEdges(nodes: WorkflowGraphNode[]): WorkflowGraphEdge[] {
@@ -180,10 +185,10 @@ export function generateWorkflowFromInterpretation(
 
   if (shouldInsertSummarizeStep(orderedTools, interpretation.goal)) {
     const searchTools = orderedTools.filter(
-      (tool) => tool === "web_search" || tool === "x_search"
+      (tool) => tool === "web_search" || tool === "x_search" || tool === "fetch_url"
     );
     const otherTools = orderedTools.filter(
-      (tool) => tool !== "web_search" && tool !== "x_search"
+      (tool) => tool !== "web_search" && tool !== "x_search" && tool !== "fetch_url"
     );
 
     for (const [index, toolName] of searchTools.entries()) {

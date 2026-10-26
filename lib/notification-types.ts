@@ -19,6 +19,8 @@ export interface NotificationItem {
   preview: string;
   retryCount: number;
   maxRetries: number;
+  templateType?: string | null;
+  openHref?: string | null;
 }
 
 export type NotificationTab = "unread" | "all" | "in_app" | "email" | "whatsapp" | "slack" | "teams";

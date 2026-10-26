@@ -19,6 +19,7 @@ import { mapReviewProposalToPendingApproval } from "./review-mapper";
 import type { PendingApproval } from "@/lib/approval-types";
 import type { RiskSeverity } from "@/lib/risk-types";
 import { handleRuntimeProposalDecision } from "@/lib/agents/protection/runtime-bridge";
+import { isAgentActivationProposal } from "@/lib/agents/activation/approval";
 
 export type HumanReviewDecision = "approved" | "rejected";
 
@@ -75,6 +76,12 @@ export async function listGatewayPendingApprovals(
   const refreshed: ActionProposalRow[] = [];
 
   for (const row of rows) {
+    if (isAgentActivationProposal(row)) {
+      if (row.status === "review_required") {
+        refreshed.push(row);
+      }
+      continue;
+    }
     try {
       const current = await deps.ensureFresh(supabase, {
         proposalId: row.id,
@@ -123,7 +130,10 @@ export async function decideGatewayProposalReview(
   const reviewDeadline = effectiveReviewDeadline(existing);
   const decidedAt = new Date().toISOString();
 
-  if (new Date(reviewDeadline) <= new Date(decidedAt)) {
+  if (
+    !isAgentActivationProposal(existing) &&
+    new Date(reviewDeadline) <= new Date(decidedAt)
+  ) {
     throw new ProposalError("Review deadline has expired for this proposal.");
   }
 

@@ -9,8 +9,10 @@ import { getAgentRunById, updateAgentRun } from "../runtime-repository";
 import { runAgentLoop } from "./run-loop";
 import {
   deriveExecutableTaskFromSetup,
+  mergeRunInputsIntoAgent,
   setupAnswersFromAgent,
 } from "./execution-plan";
+import { extractHttpUrl } from "@/lib/http/outbound-url";
 import {
   agentHasPersistedWorkflow,
   runPersistedWorkflow,
@@ -20,6 +22,12 @@ import {
   parseDeliverySettings,
 } from "../delivery/settings";
 import type { RunAgentParams, RunAgentResult } from "./types";
+import {
+  AGENT_ACTIVATE_ACTION,
+  AGENT_ACTIVATE_TOOL,
+  ensureAgentActivationApproval,
+} from "@/lib/agents/activation/approval";
+import type { PendingRuntimeApproval } from "@/lib/agents/protection/types";
 
 export async function runAgentEngine(
   supabase: SupabaseClient,
@@ -29,11 +37,23 @@ export async function runAgentEngine(
 
   await ensureOrganization(supabase, params.userId, params.userEmail);
 
-  const agent = await loadAgentForRuntime(supabase, {
+  const loaded = await loadAgentForRuntime(supabase, {
     agentDbId: params.agentDbId,
     userId: params.userId,
     runMode: params.mode ?? "manual",
   });
+  const mergedRecord = mergeRunInputsIntoAgent(loaded.record, params.runInputs);
+  const sourceUrl =
+    setupAnswersFromAgent(mergedRecord).source_url || extractHttpUrl(params.task) || "";
+  const enabledTools =
+    sourceUrl && !loaded.enabledTools.includes("fetch_url")
+      ? [...loaded.enabledTools, "fetch_url"]
+      : loaded.enabledTools;
+  const agent = {
+    ...loaded,
+    record: mergedRecord,
+    enabledTools,
+  };
 
   const limits = resolveRuntimeLimits(agent.record);
   const activity = new RuntimeActivityLogger(
@@ -63,6 +83,68 @@ export async function runAgentEngine(
     triggerSource: params.triggerSource ?? "api",
   });
 
+  const activation = await ensureAgentActivationApproval(admin, {
+    agent,
+    userId: params.userId,
+    runId,
+  });
+
+  if (!activation.approved) {
+    const pendingApproval: PendingRuntimeApproval = {
+      proposalId: activation.proposalId,
+      passportId: `activation:${activation.proposalId}`,
+      toolName: AGENT_ACTIVATE_TOOL,
+      toolInput: { agentName: agent.record.name },
+      actionType: AGENT_ACTIVATE_ACTION,
+      agentActionId: null,
+      turns: 0,
+      toolCalls: 0,
+      actionSequence: 0,
+      messages: [],
+      protectionReason: activation.summary,
+      riskLevel: "medium",
+      summary: activation.summary,
+    };
+
+    if (runId) {
+      await activity.logRunStep({
+        runId,
+        key: "agent.activation.approval",
+        label: "WAITING FOR APPROVAL",
+        detail: activation.summary,
+        status: "needs_approval",
+      });
+      await activity.finishRun({
+        runId,
+        status: "awaiting_approval",
+        summary: activation.summary,
+        errorMessage: activation.summary,
+        metadata: {
+          task,
+          pendingApproval,
+          activationProposalId: activation.proposalId,
+        },
+      });
+    }
+
+    return {
+      runId,
+      status: "awaiting_approval",
+      summary: activation.summary,
+      error: activation.summary,
+      proposalId: activation.proposalId,
+      toolCalls: 0,
+      turns: 0,
+      steps: activity.getSteps(),
+      protection: {
+        summary: activation.summary,
+        why: "This agent cannot run until you approve it on the Approvals page.",
+        riskLevel: "medium",
+        details: { agent: agent.record.name },
+      },
+    };
+  }
+
   const result = agentHasPersistedWorkflow(agent)
     ? await runPersistedWorkflow({
         admin,
@@ -72,6 +154,7 @@ export async function runAgentEngine(
         runId,
         limits,
         activity,
+        sourceImage: params.sourceImage,
       })
     : await runAgentLoop({
         admin,

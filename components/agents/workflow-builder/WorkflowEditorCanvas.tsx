@@ -3,14 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Background,
-  Controls,
-  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   addEdge,
   useEdgesState,
   useNodesState,
-  useReactFlow,
   type Connection,
   type Edge,
   type Node,
@@ -56,7 +53,7 @@ function toRfEdges(graph: AgentWorkflowGraph): Edge[] {
     targetHandle: edge.targetHandle,
     label: edge.label,
     type: "smoothstep",
-    animated: true,
+    animated: false,
   }));
 }
 
@@ -94,7 +91,6 @@ function graphSignature(graph: AgentWorkflowGraph): string {
 }
 
 function CanvasInner({ graph, userEmail, agentSlug, runStatuses, onChange }: WorkflowEditorCanvasProps) {
-  const { fitView } = useReactFlow();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<WorkflowRfNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -119,10 +115,7 @@ function CanvasInner({ graph, userEmail, agentSlug, runStatuses, onChange }: Wor
     signature.current = nextSig;
     setNodes(toRfNodes(graph, runStatuses));
     setEdges(toRfEdges(graph));
-    window.requestAnimationFrame(() => {
-      void fitView({ padding: 0.28, duration: 420 });
-    });
-  }, [graph, runStatuses, setEdges, setNodes, fitView]);
+  }, [graph, runStatuses, setEdges, setNodes]);
 
   const commit = useCallback((next: AgentWorkflowGraph) => {
     if (graph) {
@@ -148,6 +141,11 @@ function CanvasInner({ graph, userEmail, agentSlug, runStatuses, onChange }: Wor
   );
 
   const selectedNode = graph?.nodes.find((node) => node.id === selectedId) ?? null;
+  const boardHeight = Math.max(
+    1400,
+    ...(graph?.nodes.map((node) => (node.y ?? 0) + 320) ?? [1400]),
+    ...nodes.map((node) => node.position.y + 320)
+  );
 
   const handleAdd = (node: WorkflowGraphNode) => {
     if (!graph) return;
@@ -227,13 +225,6 @@ function CanvasInner({ graph, userEmail, agentSlug, runStatuses, onChange }: Wor
             >
               Auto-layout
             </button>
-            <button
-              type="button"
-              className="wfb-zoom-btn wfb-zoom-fit"
-              onClick={() => void fitView({ padding: 0.28, duration: 320 })}
-            >
-              Fit view
-            </button>
             {selectedId ? (
               <button
                 type="button"
@@ -245,7 +236,8 @@ function CanvasInner({ graph, userEmail, agentSlug, runStatuses, onChange }: Wor
             ) : null}
           </div>
         </div>
-        <div className="wf-rf-canvas">
+        <p className="wf-rf-hint">Click a box to select it, then drag to move. Drag a dot to connect boxes.</p>
+        <div className="wf-rf-board" style={{ height: boardHeight }}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -254,22 +246,25 @@ function CanvasInner({ graph, userEmail, agentSlug, runStatuses, onChange }: Wor
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeDragStop={persistPositions}
+            onNodeClick={(_event, node) => setSelectedId(node.id)}
+            onPaneClick={() => setSelectedId(null)}
             onSelectionChange={({ nodes: selected }) => setSelectedId(selected[0]?.id ?? null)}
-            defaultEdgeOptions={{ type: "smoothstep", animated: true }}
-            fitView
-            fitViewOptions={{ padding: 0.28 }}
-            minZoom={0.4}
-            maxZoom={1.6}
+            nodesDraggable
+            nodesConnectable
+            elementsSelectable
+            panOnDrag={[1, 2]}
+            selectionOnDrag={false}
+            zoomOnScroll={false}
+            zoomOnPinch
+            zoomOnDoubleClick={false}
+            preventScrolling={false}
+            defaultViewport={{ x: 48, y: 24, zoom: 1 }}
+            minZoom={0.6}
+            maxZoom={1.4}
+            defaultEdgeOptions={{ type: "smoothstep", animated: false }}
             proOptions={{ hideAttribution: true }}
           >
-            <Background gap={22} color="rgba(96, 165, 250, 0.28)" />
-            <Controls showInteractive={false} />
-            <MiniMap
-              className="wf-rf-minimap"
-              pannable
-              zoomable
-              maskColor="rgba(219, 234, 254, 0.55)"
-            />
+            <Background gap={22} color="rgba(148, 163, 184, 0.28)" />
           </ReactFlow>
         </div>
       </div>

@@ -15,6 +15,7 @@ import {
   getReviewTimeoutBehavior,
   type ReviewTimeoutBehavior,
 } from "./config";
+import { isAgentActivationProposal } from "@/lib/agents/activation/approval";
 
 export interface StoredReviewEscalation {
   level: number;
@@ -271,6 +272,10 @@ export async function applyReviewTimeoutIfExpired(
   const processedAt = now.toISOString();
 
   if (row.status !== "review_required" || !isReviewDeadlineExpired(row, now)) {
+    return { row, outcome: "none" };
+  }
+
+  if (isAgentActivationProposal(row)) {
     return { row, outcome: "none" };
   }
 

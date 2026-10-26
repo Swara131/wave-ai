@@ -258,6 +258,44 @@ export async function insertAgentPolicy(
   return mapPolicyRow(data as AgentPolicyRow);
 }
 
+export async function getBuilderAgentRecordById(
+  supabase: SupabaseClient,
+  agentId: string
+): Promise<BuilderAgentRecord | null> {
+  const { data, error } = await supabase
+    .from("agents")
+    .select("*")
+    .eq("id", agentId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message ?? "Failed to load agent.");
+  }
+
+  if (!data) return null;
+  return mapUnknownAgentRow(data);
+}
+
+export async function listBuilderAgentsForOrganization(
+  supabase: SupabaseClient,
+  organizationId: string
+): Promise<BuilderAgentRecord[]> {
+  const { data, error } = await supabase
+    .from("agents")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (error) {
+    throw new Error(error.message ?? "Failed to list agents.");
+  }
+
+  return (data ?? [])
+    .map((row) => mapUnknownAgentRow(row))
+    .filter((agent): agent is BuilderAgentRecord => agent !== null);
+}
+
 export async function getBuilderAgentById(
   supabase: SupabaseClient,
   params: { agentId: string; userId: string }

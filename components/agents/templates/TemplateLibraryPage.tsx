@@ -319,6 +319,15 @@ export default function TemplateLibraryPage() {
                   <button type="button" className="ds-btn ds-btn-secondary ds-btn-sm" onClick={() => setPreview(template)}>
                     Preview
                   </button>
+                  {template.slug === "travel-companion" || template.slug === "wedding-celebration-planner" || template.slug === "group-decision-planner" ? (
+                    <button
+                      type="button"
+                      className="ds-btn ds-btn-secondary ds-btn-sm"
+                      onClick={() => setPreview(template)}
+                    >
+                      Try Example
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="ztemplates-use-btn"

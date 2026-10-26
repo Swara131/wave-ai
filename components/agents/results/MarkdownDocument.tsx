@@ -8,11 +8,17 @@ function safeUrl(url: string): string {
   return safeHttpUrl(url) ?? "";
 }
 
-export default function MarkdownDocument({ markdown }: { markdown: string }) {
+export default function MarkdownDocument({
+  markdown,
+  variant = "default",
+}: {
+  markdown: string;
+  variant?: "default" | "colored-summary";
+}) {
   if (!markdown.trim()) return null;
 
   return (
-    <div className="wave-md">
+    <div className={variant === "colored-summary" ? "wave-md summary-doc" : "wave-md"}>
       <Markdown
         remarkPlugins={[remarkGfm]}
         urlTransform={safeUrl}

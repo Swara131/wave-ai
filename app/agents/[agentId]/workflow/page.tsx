@@ -5,18 +5,18 @@ import VisualAgentBuilder from "@/components/agents/workflow-builder/VisualAgent
 
 function BuilderFallback() {
   return (
-    <p className="wfb-loading">
+    <p className="studio-loading">
       <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-      Loading agent builder…
+      Loading workflow…
     </p>
   );
 }
 
 export default function AgentWorkflowRoute() {
   return (
-    <PageShell maxWidth="7xl" className="wfb-page">
+    <PageShell layout="workspace" className="studio-shell studio-shell-scroll">
       <Suspense fallback={<BuilderFallback />}>
-        <VisualAgentBuilder />
+        <VisualAgentBuilder variant="workflow" />
       </Suspense>
     </PageShell>
   );

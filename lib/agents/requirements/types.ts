@@ -36,7 +36,8 @@ export type RequirementInputType =
   | "schedule"
   | "policy"
   | "connection"
-  | "checkbox";
+  | "checkbox"
+  | "file";
 
 export type RequirementConfigurationType = RequirementInputType;
 
@@ -48,6 +49,8 @@ export interface RequirementChoice {
 }
 
 export type RequirementKind = "capability" | "configuration" | "business";
+
+export type RequirementScope = "setup" | "run";
 
 export interface RequirementDependency {
   key: string;
@@ -76,6 +79,7 @@ export interface AgentRequirement {
   sectionDescription?: string;
   dependsOn?: RequirementDependency;
   countsTowardProgress?: boolean;
+  scope?: RequirementScope;
 }
 
 export interface RequirementChoices {
@@ -148,7 +152,9 @@ export interface AgentRequirementsResult {
   readyCount: number;
   requiredCount: number;
   missing: AgentRequirement[];
+  runMissing: AgentRequirement[];
   ready: boolean;
+  runReady: boolean;
 }
 
 export interface AgentReadiness {

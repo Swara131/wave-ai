@@ -43,6 +43,8 @@ export interface PendingApproval {
   requester: string;
   /** Gateway proposal fields (pre-execution review queue). */
   source?: "gateway" | "retrospective";
+  /** Gateway agent slug used for /agents/[agentId] routes. */
+  agentSlug?: string;
   toolName?: string;
   actionType?: string;
   actionPayload?: Record<string, unknown>;

@@ -201,4 +201,30 @@ describe("review timeout race safety", () => {
     assert.equal(result.outcome, "none");
     assert.equal(result.row.status, "approved");
   });
+
+  it("does not auto-deny agent activation proposals", async () => {
+    const row = buildReviewRow({
+      tool_name: "activate_agent",
+      action_type: "agent.activate",
+      review_expires_at: new Date(Date.now() - 60_000).toISOString(),
+    });
+
+    const result = await applyReviewTimeoutIfExpired({} as SupabaseClient, row, {
+      timeoutBehavior: "auto_deny",
+      deps: {
+        autoDeny: async () => {
+          throw new Error("activation proposals must stay pending");
+        },
+        insertDecision: async () => {
+          throw new Error("should not insert");
+        },
+        recordAudit: () => {
+          throw new Error("should not audit expire");
+        },
+      },
+    });
+
+    assert.equal(result.outcome, "none");
+    assert.equal(result.row.status, "review_required");
+  });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Loader2 } from "lucide-react";
@@ -122,6 +122,16 @@ export default function AgentTestPage() {
       setRunning(false);
     }
   };
+
+  const runTestRef = useRef(handleRunTest);
+  runTestRef.current = handleRunTest;
+  const autoRan = useRef(false);
+
+  useEffect(() => {
+    if (autoRan.current || loadingAgent || !agent || needsSetup || task.trim().length < 3) return;
+    autoRan.current = true;
+    void runTestRef.current();
+  }, [agent, loadingAgent, needsSetup, task]);
 
   const hubHref = `/agents/${encodeURIComponent(agentId)}`;
 

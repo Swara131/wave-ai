@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PanelLeftClose, PanelLeftOpen, Shield, X } from "lucide-react";
 import AppTopBar from "@/components/layout/AppTopBar";
 import WaveNotificationHost from "@/components/notifications/WaveNotificationHost";
@@ -17,6 +17,15 @@ function isWorkspaceRoute(pathname: string): boolean {
   return (
     pathname.startsWith("/agents/create") ||
     pathname.includes("/workflow") ||
+    pathname.includes("/run") ||
+    pathname.includes("/lighting") ||
+    pathname.includes("/travel") ||
+    pathname.includes("/wedding") ||
+    pathname.includes("/group") ||
+    pathname.includes("/result") ||
+    pathname.includes("/prepare") ||
+    pathname.startsWith("/decision-agents/create") ||
+    pathname.startsWith("/decision-agents/results") ||
     (pathname.startsWith("/agents/") && pathname.endsWith("/edit"))
   );
 }
@@ -24,7 +33,8 @@ function isWorkspaceRoute(pathname: string): boolean {
 export default function ZeltaAppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => isWorkspaceRoute(pathname));
+  const workspaceRoute = isWorkspaceRoute(pathname);
   const hideChrome =
     pathname.startsWith("/onboarding/welcome") ||
     pathname.startsWith("/login") ||
@@ -32,11 +42,13 @@ export default function ZeltaAppShell({ children }: { children: React.ReactNode 
     pathname.startsWith("/forgot-password") ||
     pathname.startsWith("/auth/");
 
+  useEffect(() => {
+    if (workspaceRoute) setCollapsed(true);
+  }, [workspaceRoute]);
+
   if (hideChrome) {
     return <>{children}</>;
   }
-
-  const workspaceRoute = isWorkspaceRoute(pathname);
 
   return (
     <div className={`zshell ${collapsed ? "zshell-collapsed" : ""}`}>

@@ -29,6 +29,16 @@ describe("tool registry", () => {
       "x_search",
       "query_supabase",
       "read_document",
+      "fetch_url",
+      "create_service_quote",
+      "verify_service_address",
+      "request_electrician_visit",
+      "plan_travel_itinerary",
+      "request_travel_booking",
+      "plan_wedding_event",
+      "request_wedding_deposit",
+      "plan_group_outing",
+      "request_group_reservation",
     ]) {
       assert.ok(isToolRegistered(name), `missing ${name}`);
     }
