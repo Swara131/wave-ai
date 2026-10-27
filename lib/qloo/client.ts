@@ -1,4 +1,10 @@
-import { getQlooApiBaseUrl, getQlooApiKey } from "./env";
+import {
+  getQlooApiBaseUrl,
+  getQlooApiKey,
+  QLOO_HACKATHON_API_BASE_URL,
+  shouldRetryQlooOnHackathon,
+  unauthorizedQlooMessage,
+} from "./env";
 import type { QlooEntity, QlooErrorKind, QlooTag, QlooTasteResult } from "./types";
 
 const REQUEST_TIMEOUT_MS = 8_000;
@@ -36,7 +42,27 @@ async function qlooGet(
     };
   }
 
-  const endpoint = `${getQlooApiBaseUrl()}${pathAndQuery}`;
+  const primaryBase = getQlooApiBaseUrl();
+  const primary = await qlooGetAgainst(primaryBase, pathAndQuery, apiKey, timeoutMs);
+  if (primary.ok) return primary;
+  if (
+    (primary.error.status === 401 || primary.error.status === 403) &&
+    shouldRetryQlooOnHackathon(primaryBase)
+  ) {
+    const retry = await qlooGetAgainst(QLOO_HACKATHON_API_BASE_URL, pathAndQuery, apiKey, timeoutMs);
+    if (retry.ok) return retry;
+    return retry;
+  }
+  return primary;
+}
+
+async function qlooGetAgainst(
+  baseUrl: string,
+  pathAndQuery: string,
+  apiKey: string,
+  timeoutMs: number
+): Promise<{ ok: true; json: unknown; endpoint: string } | { ok: false; error: QlooClientError }> {
+  const endpoint = `${baseUrl}${pathAndQuery}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -52,13 +78,14 @@ async function qlooGet(
     });
 
     if (!response.ok) {
+      const kind = classifyHttpStatus(response.status);
+      const message =
+        kind === "unauthorized"
+          ? unauthorizedQlooMessage(response.status)
+          : `Qloo returned HTTP ${response.status}.`;
       return {
         ok: false,
-        error: new QlooClientError(
-          classifyHttpStatus(response.status),
-          `Qloo returned HTTP ${response.status}.`,
-          response.status
-        ),
+        error: new QlooClientError(kind, message, response.status),
       };
     }
 

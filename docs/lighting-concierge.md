@@ -5,7 +5,7 @@ Ready-made WAVE agent for electricians' customers. Clone it from **Templates** w
 ## Local setup
 
 1. Copy `.env.example` to `.env.local`.
-2. Set `QLOO_API_KEY` (server-only). Optional: `QLOO_API_BASE_URL` (default `https://api.qloo.com`).
+2. Set `QLOO_API_KEY` (server-only). Optional: `QLOO_API_BASE_URL` (default `https://hackathon.api.qloo.com`). Hackathon keys return 401 on `https://api.qloo.com`.
 3. Restart `npm run dev`.
 4. Apply `supabase/migrations/20261025180000_lighting_concierge.sql` in the Supabase SQL editor (or your usual migration process).
 5. Optional: `npm run seed:templates` so the catalog row exists in `public.templates`. The in-code catalog still lists the template without seeding.

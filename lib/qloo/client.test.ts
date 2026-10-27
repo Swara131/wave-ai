@@ -4,11 +4,17 @@ import { fetchLightingTaste, QlooClientError, searchQlooTags } from "./client";
 
 const originalFetch = globalThis.fetch;
 const originalKey = process.env.QLOO_API_KEY;
+const originalBase = process.env.QLOO_API_BASE_URL;
+const originalCommercial = process.env.QLOO_API_USE_COMMERCIAL;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
   if (originalKey === undefined) delete process.env.QLOO_API_KEY;
   else process.env.QLOO_API_KEY = originalKey;
+  if (originalBase === undefined) delete process.env.QLOO_API_BASE_URL;
+  else process.env.QLOO_API_BASE_URL = originalBase;
+  if (originalCommercial === undefined) delete process.env.QLOO_API_USE_COMMERCIAL;
+  else process.env.QLOO_API_USE_COMMERCIAL = originalCommercial;
 });
 
 describe("Qloo lighting taste client", () => {
@@ -79,5 +85,41 @@ describe("Qloo lighting taste client", () => {
     const result = await fetchLightingTaste({ style: "classic", extraQueries: [] });
     assert.equal(result.source, "fallback");
     assert.equal(result.errorKind, "unauthorized");
+    assert.match(result.error ?? "", /hackathon\.api\.qloo\.com/);
+  });
+
+  it("retries the hackathon host after a commercial 401", async () => {
+    process.env.QLOO_API_KEY = "test-qloo-key";
+    process.env.QLOO_API_USE_COMMERCIAL = "true";
+    process.env.QLOO_API_BASE_URL = "https://api.qloo.com";
+    const seen: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      seen.push(url);
+      if (url.startsWith("https://api.qloo.com")) {
+        return new Response("nope", { status: 401 });
+      }
+      if (url.includes("/v2/tags")) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            results: { tags: [{ tag_id: "urn:tag:keyword:lifestyle:classic", name: "Classic" }] },
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          success: true,
+          results: { tags: [{ tag_id: "urn:tag:keyword:lifestyle:heritage", name: "Heritage" }] },
+        }),
+        { status: 200 }
+      );
+    }) as typeof fetch;
+
+    const result = await fetchLightingTaste({ style: "classic", extraQueries: [] });
+    assert.equal(result.source, "qloo");
+    assert.ok(seen.some((url) => url.startsWith("https://api.qloo.com")));
+    assert.ok(seen.some((url) => url.startsWith("https://hackathon.api.qloo.com")));
   });
 });
