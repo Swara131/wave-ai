@@ -175,11 +175,7 @@ export async function planTravelTrip(params: {
   const qloo = await fetchTravelTaste({
     destination: params.intake.destination,
     interests: params.intake.interests,
-    extraQueries: [
-      params.intake.favoriteCuisines ?? "",
-      params.intake.culturalInterests ?? "",
-      `${params.intake.destination} travel`,
-    ],
+    extraQueries: [params.intake.favoriteCuisines ?? "", params.intake.culturalInterests ?? ""],
   });
   const itinerary = buildTravelItinerary(params.intake, qloo);
   const tripId = params.replanTripId ?? randomUUID();

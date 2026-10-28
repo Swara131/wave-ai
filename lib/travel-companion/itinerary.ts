@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { QlooTasteResult } from "@/lib/qloo/types";
+import type { QlooEntity, QlooTasteResult } from "@/lib/qloo/types";
 import type { DayPart, Interest, Pace } from "./constants";
 import { DAY_PARTS } from "./constants";
 import type { TravelActivity, TravelDay, TravelIntake, TravelItinerary } from "./types";
@@ -60,17 +60,33 @@ export function activitiesOverlap(a: TravelActivity, b: TravelActivity): boolean
   return overlap(a, b);
 }
 
-function qlooHints(qloo: QlooTasteResult, interest: Interest): { title?: string; evidence?: string } {
+function qlooPlaceForSlot(qloo: QlooTasteResult, slotKey: number): QlooEntity | null {
+  if (qloo.source !== "qloo") return null;
+  const places = qloo.entities.filter((item) => item.name.trim());
+  if (places.length === 0) return null;
+  return places[Math.abs(slotKey) % places.length];
+}
+
+function qlooHints(
+  qloo: QlooTasteResult,
+  interest: Interest,
+  slotKey: number
+): { title?: string; location?: string; evidence?: string } {
+  const place = qlooPlaceForSlot(qloo, slotKey);
+  if (place) {
+    const where = [place.address, place.neighborhood].filter(Boolean).join(", ");
+    return {
+      title: place.name,
+      location: where || undefined,
+      evidence: `Qloo returned “${place.name}” as a place candidate for this destination and the traveler's ${interest} interest. Hours, tickets, and prices are unverified.`,
+    };
+  }
   if (qloo.source !== "qloo") return {};
-  const pool = [...qloo.entities, ...qloo.tags];
-  if (pool.length === 0) return {};
-  const index = INTEREST_LABEL[interest].length % pool.length;
-  const picked = pool[index];
-  const name = "name" in picked ? picked.name : "";
-  if (!name) return {};
+  const tag = qloo.tags[Math.abs(slotKey) % Math.max(qloo.tags.length, 1)];
+  if (!tag?.name) return {};
   return {
-    title: `${name} affinity — ${INTEREST_LABEL[interest]} in this destination`,
-    evidence: `Qloo returned “${name}” for the traveler's stated ${interest} interest. This is a taste signal, not verified hours, tickets, or a reserved table.`,
+    title: `${INTEREST_LABEL[interest]} inspired by ${tag.name}`,
+    evidence: `Qloo returned the taste tag “${tag.name}” for the traveler's stated ${interest} interest. This is not a verified venue, reservation, or price.`,
   };
 }
 
@@ -83,8 +99,9 @@ function buildActivity(params: {
   start: string;
   end: string;
   interest: Interest;
+  slotKey: number;
 }): TravelActivity {
-  const hint = qlooHints(params.qloo, params.interest);
+  const hint = qlooHints(params.qloo, params.interest, params.slotKey);
   const qlooInformed = Boolean(hint.title);
   const area = params.intake.startingArea ? ` near ${params.intake.startingArea}` : "";
   const title =
@@ -111,7 +128,9 @@ function buildActivity(params: {
     endTime: params.end,
     title,
     category: params.interest,
-    location: `${params.intake.destination}${area} (address unknown)`,
+    location: hint.location
+      ? `${hint.location} (${params.intake.destination}; hours unverified)`
+      : `${params.intake.destination}${area} (address unknown)`,
     durationMinutes: minutesBetween(params.start, params.end),
     estimatedCostPerPerson: null,
     costVerified: false,
@@ -144,6 +163,7 @@ export function buildTravelItinerary(intake: TravelIntake, qloo: QlooTasteResult
         start: intake.dayStartTime && slot.part === "morning" ? intake.dayStartTime : slot.start,
         end: slot.end,
         interest,
+        slotKey: dayIndex * 8 + slotIndex,
       });
     });
     return { date, index: dayIndex, activities };
@@ -159,11 +179,18 @@ export function buildTravelItinerary(intake: TravelIntake, qloo: QlooTasteResult
     }
   }
 
-  const missingInformation = [
-    "No places or events provider is configured, so venues are unverified.",
-    "No routing provider is configured, so travel times are unknown.",
-    "Costs are unknown until a venue or ticket provider confirms them.",
-  ];
+  const missingInformation =
+    qloo.source === "qloo" && qloo.entities.length > 0
+      ? [
+          "Place names came from Qloo. Opening hours, tickets, and live prices are still unverified.",
+          "No routing provider is configured, so travel times are unknown.",
+          "Costs are unknown until a venue or ticket provider confirms them.",
+        ]
+      : [
+          "No places or events provider is configured, so venues are unverified.",
+          "No routing provider is configured, so travel times are unknown.",
+          "Costs are unknown until a venue or ticket provider confirms them.",
+        ];
   if (intake.budgetCurrency !== "INR") {
     missingInformation.push("Budget is not in INR. WAVE cannot convert currencies without a verified rate source.");
   }
@@ -212,6 +239,7 @@ export function replaceActivity(itinerary: TravelItinerary, activityId: string, 
         start: activity.startTime,
         end: activity.endTime,
         interest: nextInterest,
+        slotKey: activity.dayIndex * 8 + 3,
       });
     }),
   }));
@@ -252,6 +280,7 @@ export function regenerateDay(
             start: intake.dayStartTime && slot.part === "morning" ? intake.dayStartTime : slot.start,
             end: slot.end,
             interest: intake.interests[(dayIndex + slotIndex + 1) % intake.interests.length],
+            slotKey: dayIndex * 8 + slotIndex + 1,
           })
         ),
       };

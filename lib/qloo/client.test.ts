@@ -66,6 +66,24 @@ describe("Qloo lighting taste client", () => {
     assert.equal(result.errorKind, "empty");
   });
 
+  it("does not retry tag search after a timeout", async () => {
+    process.env.QLOO_API_KEY = "test-qloo-key";
+    const seen: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      seen.push(String(input));
+      const err = new Error("aborted");
+      err.name = "AbortError";
+      throw err;
+    }) as typeof fetch;
+    await assert.rejects(() => searchQlooTags("modern"), (err: unknown) => {
+      assert.ok(err instanceof QlooClientError);
+      assert.equal(err.kind, "timeout");
+      return true;
+    });
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].includes("filter.query"), false);
+  });
+
   it("classifies rate limits", async () => {
     process.env.QLOO_API_KEY = "test-qloo-key";
     globalThis.fetch = (async () => new Response("slow down", { status: 429 })) as typeof fetch;

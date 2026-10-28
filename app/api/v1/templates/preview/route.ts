@@ -7,6 +7,8 @@ import {
 import { parseJsonBody, secureError, secureJson } from "@/lib/security/api";
 import { ValidationError } from "@/lib/security/errors";
 
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   try {
     const body = await parseJsonBody(request, guestPreviewRequestSchema);

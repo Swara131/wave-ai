@@ -7,7 +7,7 @@ import {
 } from "./env";
 import type { QlooEntity, QlooErrorKind, QlooTag, QlooTasteResult } from "./types";
 
-const REQUEST_TIMEOUT_MS = 8_000;
+const REQUEST_TIMEOUT_MS = 12_000;
 
 export class QlooClientError extends Error {
   readonly kind: QlooErrorKind;
@@ -229,7 +229,8 @@ export async function searchQlooTags(query: string): Promise<QlooTag[]> {
   if (
     first.error.kind === "missing_key" ||
     first.error.kind === "unauthorized" ||
-    first.error.kind === "rate_limited"
+    first.error.kind === "rate_limited" ||
+    first.error.kind === "timeout"
   ) {
     throw first.error;
   }
@@ -286,8 +287,22 @@ export async function fetchLightingTaste(params: {
   try {
     const queries = usedSignals.slice(0, 4);
     const found: QlooTag[] = [];
-    for (const query of queries) {
-      const tags = await searchQlooTags(query);
+    const batches = await Promise.all(
+      queries.map(async (query) => {
+        try {
+          return await searchQlooTags(query);
+        } catch (err) {
+          if (
+            err instanceof QlooClientError &&
+            (err.kind === "missing_key" || err.kind === "unauthorized" || err.kind === "rate_limited")
+          ) {
+            throw err;
+          }
+          return [] as QlooTag[];
+        }
+      })
+    );
+    for (const tags of batches) {
       for (const tag of tags) {
         if (!found.some((item) => item.tagId === tag.tagId)) found.push(tag);
       }
@@ -435,13 +450,83 @@ export async function fetchGroupDiningTaste(params: {
   }
 }
 
+function uniqueSignals(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+  }
+  return out;
+}
+
+/**
+ * Travel uses Qloo place insights for the destination, not décor-style tags.
+ * Tags are fetched in parallel and never block the city place lookup.
+ */
 export async function fetchTravelTaste(params: {
   destination: string;
   interests: string[];
   extraQueries: string[];
 }): Promise<QlooTasteResult> {
-  return fetchLightingTaste({
-    style: params.destination,
-    extraQueries: [...params.interests, ...params.extraQueries].filter(Boolean),
-  });
+  const usedSignals = uniqueSignals([
+    params.destination,
+    ...params.interests,
+    ...params.extraQueries,
+  ]);
+
+  try {
+    const interestQueries = uniqueSignals([...params.interests, ...params.extraQueries]).slice(0, 3);
+    const tagsPromise = Promise.all(
+      interestQueries.map(async (query) => {
+        try {
+          return await searchQlooTags(query);
+        } catch (err) {
+          if (
+            err instanceof QlooClientError &&
+            (err.kind === "missing_key" || err.kind === "unauthorized" || err.kind === "rate_limited")
+          ) {
+            throw err;
+          }
+          return [] as QlooTag[];
+        }
+      })
+    );
+    const placesPromise = fetchQlooPlaceInsights({
+      city: params.destination,
+      tagIds: [],
+      entityIds: [],
+      take: 16,
+    });
+    const [tagBatches, places] = await Promise.all([tagsPromise, placesPromise]);
+    const tags: QlooTag[] = [];
+    for (const batch of tagBatches) {
+      for (const tag of batch) {
+        if (!tags.some((item) => item.tagId === tag.tagId)) tags.push(tag);
+      }
+    }
+    const hasPlaces = places.entities.length > 0;
+    return {
+      source: hasPlaces ? "qloo" : "fallback",
+      queriedAt: new Date().toISOString(),
+      endpoint: places.endpoint,
+      tags: tags.slice(0, 16),
+      entities: places.entities.slice(0, 16),
+      errorKind: hasPlaces ? undefined : "empty",
+      error: hasPlaces
+        ? undefined
+        : "Qloo returned no place candidates for that destination. WAVE did not invent venues.",
+      usedSignals,
+    };
+  } catch (err) {
+    if (err instanceof QlooClientError) return fallbackResult(err, usedSignals);
+    return fallbackResult(
+      new QlooClientError("unavailable", err instanceof Error ? err.message : "Qloo request failed."),
+      usedSignals
+    );
+  }
 }

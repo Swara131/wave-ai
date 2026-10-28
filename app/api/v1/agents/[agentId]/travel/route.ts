@@ -8,6 +8,8 @@ import { parseJsonBody, secureError, secureJson } from "@/lib/security/api";
 import { ValidationError } from "@/lib/security/errors";
 import { createClient } from "@/lib/supabase/server";
 
+export const maxDuration = 60;
+
 interface RouteContext {
   params: Promise<{ agentId: string }>;
 }

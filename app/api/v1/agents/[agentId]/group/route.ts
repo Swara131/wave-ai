@@ -6,6 +6,8 @@ import { ValidationError } from "@/lib/security/errors";
 import { createClient } from "@/lib/supabase/server";
 import { z } from "zod";
 
+export const maxDuration = 60;
+
 interface RouteContext {
   params: Promise<{ agentId: string }>;
 }

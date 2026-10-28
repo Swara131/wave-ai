@@ -17,6 +17,18 @@
     },
     "app/api/cron/agent-schedules/route.ts": {
       "maxDuration": 120
+    },
+    "app/api/v1/templates/preview/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/v1/agents/[agentId]/travel/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/v1/agents/[agentId]/lighting/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/v1/agents/[agentId]/group/route.ts": {
+      "maxDuration": 60
     }
   },
   "crons": [

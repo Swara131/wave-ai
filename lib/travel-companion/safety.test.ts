@@ -59,6 +59,10 @@ const fallbackQloo = {
   usedSignals: ["Jaipur"],
 };
 
+function urlCalledPlaceInsights(endpoint: string) {
+  return /filter\.type=urn(:|%3A)entity(:|%3A)place/i.test(endpoint) && /filter\.location\.query=/i.test(endpoint);
+}
+
 function intake() {
   return normalizeTravelIntake(
     travelIntakeSchema.parse({
@@ -260,7 +264,7 @@ describe("Travel Companion Qloo", () => {
     assert.equal(result.errorKind, "missing_key");
   });
 
-  it("uses real Qloo tags when the API succeeds", async () => {
+  it("uses real Qloo places when the API succeeds", async () => {
     const previous = process.env.QLOO_API_KEY;
     const originalFetch = globalThis.fetch;
     process.env.QLOO_API_KEY = "test-qloo-key";
@@ -278,7 +282,15 @@ describe("Travel Companion Qloo", () => {
       return new Response(
         JSON.stringify({
           success: true,
-          results: { tags: [{ tag_id: "urn:tag:genre:media:rajasthani", name: "Rajasthani" }] },
+          results: {
+            entities: [
+              {
+                entity_id: "place-hawa-mahal",
+                name: "Hawa Mahal",
+                properties: { address: "Hawa Mahal Rd, Badi Choupad" },
+              },
+            ],
+          },
         }),
         { status: 200 }
       );
@@ -288,7 +300,8 @@ describe("Travel Companion Qloo", () => {
     if (previous === undefined) delete process.env.QLOO_API_KEY;
     else process.env.QLOO_API_KEY = previous;
     assert.equal(result.source, "qloo");
-    assert.ok(result.tags.length > 0);
+    assert.ok(result.entities.some((entity) => entity.name === "Hawa Mahal"));
+    assert.ok(urlCalledPlaceInsights(result.endpoint));
   });
 
   it("falls back when Qloo returns no results or fails", async () => {
@@ -308,6 +321,28 @@ describe("Travel Companion Qloo", () => {
 });
 
 describe("Travel Companion bookings and persistence", () => {
+  it("uses Qloo place names on itinerary stops without claiming hours or tickets", () => {
+    const qloo = {
+      source: "qloo" as const,
+      queriedAt: new Date().toISOString(),
+      endpoint: "https://hackathon.api.qloo.com/v2/insights",
+      tags: [],
+      entities: [
+        {
+          entityId: "place-hawa-mahal",
+          name: "Hawa Mahal",
+          address: "Hawa Mahal Rd, Badi Choupad",
+        },
+      ],
+      usedSignals: ["Jaipur"],
+    };
+    const plan = buildTravelItinerary(intake(), qloo);
+    const activities = plan.days.flatMap((day) => day.activities);
+    assert.ok(activities.every((activity) => activity.title === "Hawa Mahal"));
+    assert.ok(activities.every((activity) => activity.hoursVerified === false));
+    assert.ok(plan.missingInformation.some((item) => /Qloo/i.test(item)));
+  });
+
   it("labels itinerary stops as unverified when no places provider exists", () => {
     const plan = buildTravelItinerary(intake(), fallbackQloo);
     assert.ok(plan.days.flatMap((day) => day.activities).every((activity) => activity.availability === "unknown"));

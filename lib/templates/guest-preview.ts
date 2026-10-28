@@ -79,7 +79,7 @@ export async function runGuestTemplatePreview(
     const qloo = await fetchTravelTaste({
       destination: normalized.destination,
       interests: normalized.interests,
-      extraQueries: [normalized.favoriteCuisines ?? "", `${normalized.destination} travel`],
+      extraQueries: [normalized.favoriteCuisines ?? ""],
     });
     const itinerary = buildTravelItinerary(normalized, qloo);
     const warnings = [
