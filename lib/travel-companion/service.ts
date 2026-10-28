@@ -143,6 +143,14 @@ function bookingResourceType(params: {
   return "pending_request";
 }
 
+const TRANSIENT_QLOO_ERRORS = new Set(["timeout", "unauthorized", "unavailable", "rate_limited"]);
+
+export function shouldReusePlannedTrip(trip: TravelTrip): boolean {
+  const kind = trip.qloo.errorKind;
+  if (kind && TRANSIENT_QLOO_ERRORS.has(kind)) return false;
+  return true;
+}
+
 export function existingOpenBooking(bookings: TravelBooking[], activityId: string): TravelBooking | undefined {
   return bookings.find(
     (booking) => booking.activityId === activityId && booking.status !== "rejected" && booking.status !== "blocked"
@@ -166,7 +174,7 @@ export async function planTravelTrip(params: {
         agentId: agent.id,
         idempotencyKey,
       })) ??       travelTripsFromSafety(agent.safetySettings).find((item) => item.idempotencyKey === idempotencyKey);
-    if (existing) {
+    if (existing && shouldReusePlannedTrip(existing)) {
       trackTravelRun(admin, agent, params.userId, existing, "plan");
       return existing;
     }

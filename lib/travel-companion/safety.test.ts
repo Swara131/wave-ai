@@ -13,7 +13,7 @@ import { travelIntakeSchema } from "./intake";
 import { activitiesOverlap, buildTravelItinerary } from "./itinerary";
 import { applyTravelDecisionToTrip } from "./approvals";
 import { normalizeTravelIntake } from "./intake";
-import { existingOpenBooking } from "./service";
+import { existingOpenBooking, shouldReusePlannedTrip } from "./service";
 import { mergeTravelTripIntoSafety, travelTripsFromSafety } from "./repository";
 import type { TravelActivity, TravelTrip } from "./types";
 
@@ -321,6 +321,35 @@ describe("Travel Companion Qloo", () => {
 });
 
 describe("Travel Companion bookings and persistence", () => {
+  it("does not reuse a trip whose Qloo call timed out", () => {
+    const trip = {
+      id: "t1",
+      organizationId: "o1",
+      agentId: "a1",
+      userId: "u1",
+      intake: intake(),
+      itinerary: buildTravelItinerary(intake(), fallbackQloo),
+      qloo: { ...fallbackQloo, errorKind: "timeout" as const, error: "Qloo request timed out." },
+      bookings: [],
+      safety: {
+        decision: "ALLOW" as const,
+        actionType: PLAN_ITINERARY_ACTION,
+        toolName: PLAN_ITINERARY_TOOL,
+        estimatedAmountInr: null,
+        policyRules: [],
+        reason: "plan",
+        approvalStatus: "not_required" as const,
+        proposalId: null,
+        timestamp: new Date().toISOString(),
+        executionStatus: "executed" as const,
+      },
+      idempotencyKey: "k",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    assert.equal(shouldReusePlannedTrip(trip), false);
+  });
+
   it("uses Qloo place names on itinerary stops without claiming hours or tickets", () => {
     const qloo = {
       source: "qloo" as const,
