@@ -1,4 +1,4 @@
-import type { QlooTasteResult } from "@/lib/qloo/types";
+import type { SuggestionSource, TasteSnapshot } from "@/lib/taste/snapshot";
 import type { FeedbackReason } from "./constants";
 
 export interface GroupParticipant {
@@ -42,7 +42,7 @@ export interface RestaurantCandidate {
   popularity?: number | null;
   affinity?: number | null;
   tags: string[];
-  source: "qloo" | "stated_preferences";
+  source: SuggestionSource;
   retrievedAt: string;
   unknownFields: string[];
 }
@@ -135,7 +135,7 @@ export interface GroupOuting {
   agentId: string;
   idempotencyKey: string;
   intake: GroupIntake;
-  qloo: QlooTasteResult;
+  taste: TasteSnapshot;
   candidates: RestaurantCandidate[];
   recommendations: GroupRecommendation[];
   feedback: GroupFeedback[];

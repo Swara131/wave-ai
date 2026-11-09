@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AgentSafetySettings } from "@/lib/agents/runtime-types";
+import { mapStoredTaste } from "@/lib/taste/snapshot";
 import type { TravelTrip } from "./types";
 
 function isMissingTable(message: string | undefined): boolean {
@@ -21,7 +22,12 @@ export function travelTripsFromSafety(value: unknown): TravelTrip[] {
   if (!value || typeof value !== "object") return [];
   const trips = (value as { travelCompanion?: { trips?: unknown } }).travelCompanion?.trips;
   if (!Array.isArray(trips)) return [];
-  return trips.filter((item): item is TravelTrip => Boolean(item && typeof item === "object" && "id" in item));
+  return trips
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && "id" in item))
+    .map((item) => ({
+      ...(item as unknown as TravelTrip),
+      taste: mapStoredTaste((item as { taste?: unknown; qloo?: unknown }).taste ?? (item as { qloo?: unknown }).qloo),
+    }));
 }
 
 export function mergeTravelTripIntoSafety(safety: AgentSafetySettings, trip: TravelTrip): AgentSafetySettings {
@@ -45,7 +51,7 @@ function mapTrip(row: Record<string, unknown>): TravelTrip {
     idempotencyKey: String(row.idempotency_key ?? ""),
     intake: row.intake as TravelTrip["intake"],
     itinerary: row.itinerary as TravelTrip["itinerary"],
-    qloo: row.qloo as TravelTrip["qloo"],
+    taste: mapStoredTaste(row.taste ?? row.qloo),
     safety: row.safety as TravelTrip["safety"],
     bookings: (row.bookings as TravelTrip["bookings"]) ?? [],
     createdAt: String(row.created_at),
@@ -119,7 +125,7 @@ export async function insertTravelTrip(supabase: SupabaseClient, trip: TravelTri
       idempotency_key: trip.idempotencyKey,
       intake: trip.intake,
       itinerary: trip.itinerary,
-      qloo: trip.qloo,
+      qloo: trip.taste,
       safety: trip.safety,
       bookings: trip.bookings,
     })
@@ -134,7 +140,7 @@ export async function insertTravelTrip(supabase: SupabaseClient, trip: TravelTri
 
 export async function updateTravelTrip(
   supabase: SupabaseClient,
-  params: { tripId: string; userId: string; patch: Partial<Pick<TravelTrip, "itinerary" | "safety" | "bookings" | "qloo">> }
+  params: { tripId: string; userId: string; patch: Partial<Pick<TravelTrip, "itinerary" | "safety" | "bookings" | "taste">> }
 ): Promise<TravelTrip> {
   const { data, error } = await supabase
     .from("travel_trips")
@@ -142,7 +148,7 @@ export async function updateTravelTrip(
       ...(params.patch.itinerary ? { itinerary: params.patch.itinerary } : {}),
       ...(params.patch.safety ? { safety: params.patch.safety } : {}),
       ...(params.patch.bookings ? { bookings: params.patch.bookings } : {}),
-      ...(params.patch.qloo ? { qloo: params.patch.qloo } : {}),
+      ...(params.patch.taste ? { qloo: params.patch.taste } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", params.tripId)

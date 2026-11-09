@@ -69,7 +69,7 @@ export const SAMPLE_GROUP_INTAKE = {
 };
 
 export const GROUP_MISSION = {
-  goal: "Combine individual tastes with Qloo evidence and hard constraints to recommend restaurants a group can agree on. Never invent restaurants, hours, prices, or confirmed reservations.",
+  goal: "Combine individual tastes and hard constraints to recommend restaurants a group can agree on. Never invent restaurants, hours, prices, or confirmed reservations.",
   allowedTools: [PLAN_GROUP_TOOL, REQUEST_RESERVATION_TOOL],
   allowedActions: [PLAN_GROUP_ACTION, REQUEST_RESERVATION_ACTION],
 };

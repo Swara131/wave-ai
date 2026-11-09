@@ -32,16 +32,7 @@ const intake = {
 
 function job(overrides: Partial<LightingJob> = {}): LightingJob {
   const quote = buildLightingQuote(intake, defaultLightingRates());
-  const plan = buildLightingPlan(intake, quote, {
-    source: "fallback",
-    queriedAt: new Date().toISOString(),
-    endpoint: "",
-    tags: [],
-    entities: [],
-    errorKind: "missing_key",
-    error: "Qloo is not configured.",
-    usedSignals: ["modern"],
-  });
+  const plan = buildLightingPlan(intake, quote);
   return {
     id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     organizationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
@@ -51,14 +42,11 @@ function job(overrides: Partial<LightingJob> = {}): LightingJob {
     intake,
     plan,
     quote,
-    qloo: {
-      source: "fallback",
+    taste: {
+      source: "stated_preferences",
       queriedAt: new Date().toISOString(),
-      endpoint: "",
-      tags: [],
-      entities: [],
-      errorKind: "missing_key",
       usedSignals: ["modern"],
+      places: [],
     },
     safety: {
       decision: "ALLOW",
@@ -86,15 +74,7 @@ function job(overrides: Partial<LightingJob> = {}): LightingJob {
 describe("Lighting Concierge workflow", () => {
   it("builds a structured plan from valid intake", () => {
     const quote = buildLightingQuote(intake, defaultLightingRates());
-    const plan = buildLightingPlan(intake, quote, {
-      source: "fallback",
-      queriedAt: new Date().toISOString(),
-      endpoint: "",
-      tags: [],
-      entities: [],
-      errorKind: "missing_key",
-      usedSignals: ["modern"],
-    });
+    const plan = buildLightingPlan(intake, quote);
     assert.ok(plan.layers.some((layer) => layer.name === "Ambient"));
     assert.ok(plan.colourTemperatureKelvin.range.includes("2700K"));
     assert.equal(plan.colourTemperatureKelvin.source, "general_lighting_guidance");

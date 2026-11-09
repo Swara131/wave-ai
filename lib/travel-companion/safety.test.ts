@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { LoadedAgent } from "@/lib/agents/runtime/types";
 import { evaluateAction } from "@/lib/safety/gate";
-import { fetchTravelTaste } from "@/lib/qloo/client";
 import {
   PLAN_ITINERARY_ACTION,
   PLAN_ITINERARY_TOOL,
@@ -49,19 +48,12 @@ function agent(): LoadedAgent {
   };
 }
 
-const fallbackQloo = {
-  source: "fallback" as const,
+const fallbackTaste = {
+  source: "stated_preferences" as const,
   queriedAt: new Date().toISOString(),
-  endpoint: "",
-  tags: [],
-  entities: [],
-  errorKind: "missing_key" as const,
   usedSignals: ["Jaipur"],
+  places: [] as Array<{ name: string }>,
 };
-
-function urlCalledPlaceInsights(endpoint: string) {
-  return /filter\.type=urn(:|%3A)entity(:|%3A)place/i.test(endpoint) && /filter\.location\.query=/i.test(endpoint);
-}
 
 function intake() {
   return normalizeTravelIntake(
@@ -83,14 +75,14 @@ describe("Travel Companion intake and itinerary", () => {
     const oneDay = normalizeTravelIntake(
       travelIntakeSchema.parse({ ...intake(), startDate: "2026-11-10", endDate: "2026-11-10" })
     );
-    const plan = buildTravelItinerary(oneDay, fallbackQloo);
+    const plan = buildTravelItinerary(oneDay, fallbackTaste);
     assert.equal(plan.days.length, 1);
     assert.ok(plan.days[0].activities.length >= 2);
     assert.equal(plan.conflicts.length, 0);
   });
 
   it("builds a multi-day itinerary", () => {
-    const plan = buildTravelItinerary(intake(), fallbackQloo);
+    const plan = buildTravelItinerary(intake(), fallbackTaste);
     assert.equal(plan.days.length, 3);
     assert.ok(plan.days.every((day) => day.activities.length > 0));
   });
@@ -122,7 +114,7 @@ describe("Travel Companion intake and itinerary", () => {
       estimatedCostPerPerson: null,
       costVerified: false,
       reason: "test",
-      qlooInformed: false,
+      suggestionInformed: false,
       source: "stated_preferences",
       availability: "unknown",
       hoursVerified: false,
@@ -206,8 +198,8 @@ describe("Travel Companion safety", () => {
       agentId: "a",
       idempotencyKey: "k",
       intake: intake(),
-      itinerary: buildTravelItinerary(intake(), fallbackQloo),
-      qloo: fallbackQloo,
+      itinerary: buildTravelItinerary(intake(), fallbackTaste),
+      taste: fallbackTaste,
       safety: {
         decision: "REVIEW" as const,
         actionType: REQUEST_BOOKING_ACTION,
@@ -253,83 +245,16 @@ describe("Travel Companion safety", () => {
   });
 });
 
-describe("Travel Companion Qloo", () => {
-  it("falls back when the API key is missing", async () => {
-    const previous = process.env.QLOO_API_KEY;
-    delete process.env.QLOO_API_KEY;
-    const result = await fetchTravelTaste({ destination: "Jaipur", interests: ["food"], extraQueries: [] });
-    if (previous === undefined) delete process.env.QLOO_API_KEY;
-    else process.env.QLOO_API_KEY = previous;
-    assert.equal(result.source, "fallback");
-    assert.equal(result.errorKind, "missing_key");
-  });
-
-  it("uses real Qloo places when the API succeeds", async () => {
-    const previous = process.env.QLOO_API_KEY;
-    const originalFetch = globalThis.fetch;
-    process.env.QLOO_API_KEY = "test-qloo-key";
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes("/v2/tags")) {
-        return new Response(
-          JSON.stringify({
-            success: true,
-            results: { tags: [{ tag_id: "urn:tag:genre:media:folk", name: "Folk" }] },
-          }),
-          { status: 200 }
-        );
-      }
-      return new Response(
-        JSON.stringify({
-          success: true,
-          results: {
-            entities: [
-              {
-                entity_id: "place-hawa-mahal",
-                name: "Hawa Mahal",
-                properties: { address: "Hawa Mahal Rd, Badi Choupad" },
-              },
-            ],
-          },
-        }),
-        { status: 200 }
-      );
-    }) as typeof fetch;
-    const result = await fetchTravelTaste({ destination: "Jaipur", interests: ["music"], extraQueries: [] });
-    globalThis.fetch = originalFetch;
-    if (previous === undefined) delete process.env.QLOO_API_KEY;
-    else process.env.QLOO_API_KEY = previous;
-    assert.equal(result.source, "qloo");
-    assert.ok(result.entities.some((entity) => entity.name === "Hawa Mahal"));
-    assert.ok(urlCalledPlaceInsights(result.endpoint));
-  });
-
-  it("falls back when Qloo returns no results or fails", async () => {
-    const previous = process.env.QLOO_API_KEY;
-    const originalFetch = globalThis.fetch;
-    process.env.QLOO_API_KEY = "test-qloo-key";
-    globalThis.fetch = (async () => new Response(JSON.stringify({ success: true, results: { tags: [] } }), { status: 200 })) as typeof fetch;
-    const empty = await fetchTravelTaste({ destination: "Jaipur", interests: ["art"], extraQueries: [] });
-    globalThis.fetch = (async () => new Response("nope", { status: 500 })) as typeof fetch;
-    const failed = await fetchTravelTaste({ destination: "Jaipur", interests: ["art"], extraQueries: [] });
-    globalThis.fetch = originalFetch;
-    if (previous === undefined) delete process.env.QLOO_API_KEY;
-    else process.env.QLOO_API_KEY = previous;
-    assert.equal(empty.source, "fallback");
-    assert.equal(failed.source, "fallback");
-  });
-});
-
 describe("Travel Companion bookings and persistence", () => {
-  it("does not reuse a trip whose Qloo call timed out", () => {
+  it("does not reuse a trip whose suggestion lookup failed", () => {
     const trip = {
       id: "t1",
       organizationId: "o1",
       agentId: "a1",
       userId: "u1",
       intake: intake(),
-      itinerary: buildTravelItinerary(intake(), fallbackQloo),
-      qloo: { ...fallbackQloo, errorKind: "timeout" as const, error: "Qloo request timed out." },
+      itinerary: buildTravelItinerary(intake(), fallbackTaste),
+      taste: { ...fallbackTaste, error: "Web search is not configured." },
       bookings: [],
       safety: {
         decision: "ALLOW" as const,
@@ -350,30 +275,22 @@ describe("Travel Companion bookings and persistence", () => {
     assert.equal(shouldReusePlannedTrip(trip), false);
   });
 
-  it("uses Qloo place names on itinerary stops without claiming hours or tickets", () => {
-    const qloo = {
-      source: "qloo" as const,
+  it("uses web search titles on itinerary stops without claiming hours or tickets", () => {
+    const taste = {
+      source: "web_search" as const,
       queriedAt: new Date().toISOString(),
-      endpoint: "https://hackathon.api.qloo.com/v2/insights",
-      tags: [],
-      entities: [
-        {
-          entityId: "place-hawa-mahal",
-          name: "Hawa Mahal",
-          address: "Hawa Mahal Rd, Badi Choupad",
-        },
-      ],
       usedSignals: ["Jaipur"],
+      places: [{ name: "Hawa Mahal", url: "https://example.com/hawa-mahal" }],
     };
-    const plan = buildTravelItinerary(intake(), qloo);
+    const plan = buildTravelItinerary(intake(), taste);
     const activities = plan.days.flatMap((day) => day.activities);
     assert.ok(activities.every((activity) => activity.title === "Hawa Mahal"));
     assert.ok(activities.every((activity) => activity.hoursVerified === false));
-    assert.ok(plan.missingInformation.some((item) => /Qloo/i.test(item)));
+    assert.ok(plan.missingInformation.some((item) => /web search/i.test(item)));
   });
 
   it("labels itinerary stops as unverified when no places provider exists", () => {
-    const plan = buildTravelItinerary(intake(), fallbackQloo);
+    const plan = buildTravelItinerary(intake(), fallbackTaste);
     assert.ok(plan.days.flatMap((day) => day.activities).every((activity) => activity.availability === "unknown"));
     assert.ok(plan.missingInformation.some((item) => /unverified/i.test(item)));
   });
@@ -410,8 +327,8 @@ describe("Travel Companion bookings and persistence", () => {
       agentId: "a",
       idempotencyKey: "k",
       intake: intake(),
-      itinerary: buildTravelItinerary(intake(), fallbackQloo),
-      qloo: fallbackQloo,
+      itinerary: buildTravelItinerary(intake(), fallbackTaste),
+      taste: fallbackTaste,
       safety: {
         decision: "REVIEW" as const,
         actionType: REQUEST_BOOKING_ACTION,
@@ -445,8 +362,8 @@ describe("Travel Companion bookings and persistence", () => {
       agentId: "a",
       idempotencyKey: "k",
       intake: intake(),
-      itinerary: buildTravelItinerary(intake(), fallbackQloo),
-      qloo: fallbackQloo,
+      itinerary: buildTravelItinerary(intake(), fallbackTaste),
+      taste: fallbackTaste,
       safety: {
         decision: "ALLOW",
         actionType: PLAN_ITINERARY_ACTION,

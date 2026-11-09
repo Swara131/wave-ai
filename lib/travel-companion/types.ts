@@ -1,4 +1,4 @@
-import type { QlooTasteResult } from "@/lib/qloo/types";
+import type { SuggestionSource, TasteSnapshot } from "@/lib/taste/snapshot";
 import type { DayPart, Interest, Pace, Transport } from "./constants";
 
 export interface TravelIntake {
@@ -37,9 +37,9 @@ export interface TravelActivity {
   estimatedCostPerPerson: number | null;
   costVerified: boolean;
   reason: string;
-  qlooInformed: boolean;
-  qlooEvidence?: string;
-  source: "qloo" | "stated_preferences";
+  suggestionInformed: boolean;
+  suggestionEvidence?: string;
+  source: SuggestionSource;
   availability: "verified" | "unavailable" | "unknown";
   hoursVerified: boolean;
   travelTimeVerified: boolean;
@@ -103,7 +103,7 @@ export interface TravelTrip {
   idempotencyKey: string;
   intake: TravelIntake;
   itinerary: TravelItinerary;
-  qloo: QlooTasteResult;
+  taste: TasteSnapshot;
   safety: TravelSafetyRecord;
   bookings: TravelBooking[];
   createdAt: string;

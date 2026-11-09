@@ -190,7 +190,7 @@ export default function GroupDecisionPage() {
       }
       if (step === 2) {
         if (!outing) throw new Error("Save the group first.");
-        setNotice("Asking Qloo for place candidates…");
+        setNotice("Ranking options from stated likes and available search…");
         await postJson("group/action", { action: "discover", outingId: outing.id });
         setStep(3);
         return;
@@ -219,7 +219,7 @@ export default function GroupDecisionPage() {
           </Link>
           <p className="lc-kicker">Group Decision Planner</p>
           <h1>{agentName}</h1>
-          <p className="lc-lead">Each person’s tastes stay separate. Next saves the step. Qloo is used only on Discover.</p>
+          <p className="lc-lead">Each person’s tastes stay separate. Next saves the step. Discover ranks stated likes and optional web search titles.</p>
         </div>
         <StatusBadge tone={agentStatus === "active" || agentStatus === "published" ? "success" : "warning"}>
           {agentStatus}
@@ -332,15 +332,15 @@ export default function GroupDecisionPage() {
           <div className="lc-card-head">
             <h2>Discover restaurants</h2>
             <p>
-              Next calls Qloo place insights for {city}. WAVE will not invent restaurants. Scoring weights: taste {SCORE_WEIGHTS.taste}, budget {SCORE_WEIGHTS.budget}, travel {SCORE_WEIGHTS.travel}, diet {SCORE_WEIGHTS.diet}, fairness {SCORE_WEIGHTS.fairness}.
+              Next ranks stated likes for {city}. WAVE will not invent restaurants. Scoring weights: taste {SCORE_WEIGHTS.taste}, budget {SCORE_WEIGHTS.budget}, travel {SCORE_WEIGHTS.travel}, diet {SCORE_WEIGHTS.diet}, fairness {SCORE_WEIGHTS.fairness}.
             </p>
           </div>
-          {outing?.qloo.error ? (
-            <Banner tone="warn" title="Qloo fallback">
-              {outing.qloo.error} Results below are not claimed as live Qloo restaurants.
+          {outing?.taste.error ? (
+            <Banner tone="warn" title="Search unavailable">
+              {outing.taste.error} Results below are ranked from stated likes and are not live restaurant listings.
             </Banner>
           ) : (
-            <p className="lc-copy">{people.length} individual profiles will be sent as signals. No places provider is connected, so hours, prices, and travel times stay unknown unless Qloo returns them.</p>
+            <p className="lc-copy">{people.length} individual profiles stay separate. Hours, prices, and travel times stay unknown unless a booking provider confirms them.</p>
           )}
         </section>
       ) : null}
@@ -440,7 +440,7 @@ export default function GroupDecisionPage() {
               </div>
             ))
           ) : (
-            <p className="lc-copy">No live restaurant list yet. Go back and run Discover, or check the Qloo error.</p>
+            <p className="lc-copy">No ranked options yet. Go back and run Discover.</p>
           )}
           {outing?.feedback.filter((item) => !item.undone).map((item) => (
             <p key={item.id} className="lc-copy">
@@ -501,7 +501,8 @@ export default function GroupDecisionPage() {
           <CheckCircle2 className="lc-success-icon" aria-hidden="true" />
           <h2>Group plan saved</h2>
           <p className="lc-lead">
-            {outing?.intake.groupName ?? "Your group"} is stored on this WAVE agent. {outing?.qloo.source === "qloo" ? "Restaurant candidates came from Qloo." : "Qloo was not used as a live source for the final list."} No table is confirmed.
+            {outing?.intake.groupName ?? "Your group"} is stored on this WAVE agent. Rankings use stated likes
+            {outing?.taste.source === "web_search" ? " and optional web search titles" : ""}. No table is confirmed.
           </p>
           <div className="lc-wizard-nav">
             <button type="button" className="ds-btn ds-btn-secondary" onClick={() => setStep(0)}>

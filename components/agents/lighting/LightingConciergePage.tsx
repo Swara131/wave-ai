@@ -587,28 +587,13 @@ export default function LightingConciergePage() {
 
               <section className="lc-card">
                 <div className="lc-card-head">
-                  <h2>Qloo insights</h2>
+                  <h2>How this plan was built</h2>
                 </div>
-                {job.qloo.source === "qloo" ? (
-                  <>
-                    <p className="lc-copy">
-                      Returned from {job.qloo.endpoint} at {job.qloo.queriedAt}.
-                    </p>
-                    <ul className="lc-list">
-                      {job.qloo.tags.map((tag) => (
-                        <li key={tag.tagId}>Tag: {tag.name}</li>
-                      ))}
-                      {job.qloo.entities.map((entity) => (
-                        <li key={entity.entityId}>Brand/entity: {entity.name}</li>
-                      ))}
-                    </ul>
-                  </>
-                ) : (
-                  <p className="lc-copy">
-                    Fallback recommendation. {job.qloo.error ?? "Qloo data was not used."} Kelvin and room
-                    suitability still come from general lighting rules and the customer form.
-                  </p>
-                )}
+                <p className="lc-copy">
+                  Suggestions use the customer&apos;s room details, style, budget, and the configured rate
+                  table. Kelvin ranges are general lighting guidance, not a lab measurement. WAVE does not
+                  invent supplier SKUs or electrician availability.
+                </p>
               </section>
 
               <section className="lc-card">

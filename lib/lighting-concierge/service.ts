@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { updateBuilderAgent } from "@/lib/agents/repository";
 import type { BuilderAgentRecord } from "@/lib/agents/runtime-types";
 import { evaluateToolThroughControlLayer } from "@/lib/agents/runtime/control/control-layer";
-import { fetchLightingTaste } from "@/lib/qloo/client";
+import { emptyTaste } from "@/lib/taste/snapshot";
 import {
   CREATE_QUOTE_ACTION,
   CREATE_QUOTE_TOOL,
@@ -74,7 +74,7 @@ async function persistLightingJob(
         safety: job.safety,
         address: job.address,
         appointment: job.appointment,
-        qloo: job.qloo,
+        taste: job.taste,
       },
     });
   } catch (error) {
@@ -184,15 +184,13 @@ export async function generateLightingPlan(params: {
   }
 
   const quote = buildLightingQuote(params.intake, rates);
-  const qloo = await fetchLightingTaste({
-    style: params.intake.preferredStyle,
-    extraQueries: [
-      params.intake.additionalPreferences ?? "",
-      `${params.intake.preferredStyle} interior design`,
-      "home décor",
-    ].filter(Boolean),
-  });
-  const plan = buildLightingPlan(params.intake, quote, qloo);
+  const taste = emptyTaste([
+    params.intake.preferredStyle,
+    params.intake.lightingPreference,
+    params.intake.roomType,
+    params.intake.additionalPreferences ?? "",
+  ]);
+  const plan = buildLightingPlan(params.intake, quote);
 
   const jobId = randomUUID();
   const control = await evaluateToolThroughControlLayer(admin, {
@@ -236,7 +234,7 @@ export async function generateLightingPlan(params: {
     intake: params.intake,
     plan,
     quote,
-    qloo,
+    taste,
     safety,
     address: {
       status: addressStatus,
@@ -418,14 +416,13 @@ function trackLightingRun(
       jobId: job.id,
       plan: job.plan,
       quote: job.quote,
-      qlooSource: job.qloo.source,
       appointment: job.appointment.status,
       address: job.address.status,
     },
     executionStatus: executionStatusFromSafety(job.safety.decision),
     safetyDecision: job.safety.decision,
     approvalState: job.safety.approvalStatus,
-    sources: [job.qloo.source === "qloo" ? "qloo" : "stated_preferences", "rate_table"],
+    sources: ["stated_preferences", "rate_table"],
   });
 }
 

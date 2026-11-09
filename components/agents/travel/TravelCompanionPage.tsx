@@ -169,13 +169,14 @@ export default function TravelCompanionPage() {
       if (!response.ok || !payload.trip) throw new Error(payload.error ?? "Could not plan the trip.");
       setTrip(payload.trip);
       setDayIndex(0);
-      const qlooFallback = payload.trip.qloo.source !== "qloo";
+      const usedSearch = payload.trip.taste.source === "web_search";
       setNotice({
-        tone: qlooFallback ? "warn" : "ok",
-        title: qlooFallback ? "Personalization used fallback data" : "Itinerary saved",
-        text: qlooFallback
-          ? payload.trip.qloo.error ?? "Qloo was unavailable, so WAVE used the traveler's stated preferences."
-          : "Day-by-day plan stored. Venues, hours, and prices remain unverified until a places provider is connected.",
+        tone: usedSearch ? "ok" : "warn",
+        title: usedSearch ? "Itinerary saved" : "Plan uses stated preferences",
+        text: usedSearch
+          ? "Day-by-day plan stored. Web search titles are unverified venues, hours, and prices."
+          : payload.trip.taste.error ??
+            "WAVE used the traveler's stated interests. Venues, hours, and prices remain unverified.",
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not plan the trip.");
@@ -322,7 +323,7 @@ export default function TravelCompanionPage() {
         <section className="lc-card">
           <div className="lc-card-head">
             <h2>Traveler preferences</h2>
-            <p>Required trip details only. Optional tastes personalize Qloo queries when the key is set.</p>
+            <p>Required trip details. Optional tastes shape the itinerary. Hours and prices stay unverified.</p>
           </div>
           <div className="lc-fields">
             <Field label="Destination" error={fieldErrors.destination}>
@@ -520,7 +521,7 @@ export default function TravelCompanionPage() {
               <h2>Providers</h2>
             </div>
             <ul className="lc-list">
-              <li>Qloo: taste tags and insights when QLOO_API_KEY is set.</li>
+              <li>Web search: optional Tavily or Brave titles when those keys are set.</li>
               <li>Places, maps, routing, tickets, tables: not configured.</li>
               <li>Payments: WAVE will not collect cards or charge money.</li>
             </ul>
@@ -540,13 +541,13 @@ export default function TravelCompanionPage() {
               {money(trip.itinerary.remainingBudgetInr, trip.itinerary.currency)}.
             </p>
           </div>
-          {trip.qloo.source !== "qloo" ? (
-            <Banner tone="warn" title="Qloo personalization unavailable">
-              {trip.qloo.error ?? "WAVE used stated preferences only. Recommendations are not invented Qloo results."}
+          {trip.taste.source === "web_search" ? (
+            <Banner tone="ok" title="Web search suggestions">
+              Stop titles came from configured web search. They are not verified venues, hours, tickets, or reservations.
             </Banner>
           ) : (
-            <Banner tone="ok" title="Qloo-informed">
-              Taste tags from GET /v2/tags and GET /v2/insights were used as affinity signals, not as verified venues.
+            <Banner tone="warn" title="Stated preferences only">
+              {trip.taste.error ?? "WAVE used the traveler's stated interests. Recommendations are not live bookings."}
             </Banner>
           )}
           {trip.itinerary.missingInformation.map((item) => (

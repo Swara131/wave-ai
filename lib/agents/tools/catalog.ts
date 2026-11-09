@@ -385,15 +385,15 @@ export const ZELTA_TOOL_CATALOG: ZeltaToolDefinition[] = [
   {
     name: "plan_travel_itinerary",
     label: "Plan travel itinerary",
-    description: "Build a day-by-day local itinerary from traveler preferences and optional Qloo taste data.",
+    description: "Build a day-by-day local itinerary from traveler preferences and optional web search titles.",
     actionType: "travel.itinerary",
     riskLevel: "low",
     permissions: [
       {
         provider: "none",
-        label: "Qloo taste (optional)",
-        description: "Uses QLOO_API_KEY when set. Falls back to stated preferences if Qloo is unavailable.",
-        envVarsAny: ["QLOO_API_KEY"],
+        label: "Web search (optional)",
+        description: "Uses TAVILY_API_KEY or BRAVE_SEARCH_API_KEY when set. Falls back to stated preferences.",
+        envVarsAny: ["TAVILY_API_KEY", "BRAVE_SEARCH_API_KEY"],
         settingsPath: "/settings?tab=integrations",
       },
     ],
@@ -437,7 +437,7 @@ export const ZELTA_TOOL_CATALOG: ZeltaToolDefinition[] = [
   {
     name: "plan_wedding_event",
     label: "Plan wedding event",
-    description: "Build a wedding or celebration plan from stated preferences. Does not use Qloo.",
+    description: "Build a wedding or celebration plan from stated preferences.",
     actionType: "wedding.plan",
     riskLevel: "low",
     permissions: [{ provider: "none", label: "Built-in", description: "Uses organizer-entered preferences only." }],
@@ -480,15 +480,15 @@ export const ZELTA_TOOL_CATALOG: ZeltaToolDefinition[] = [
   {
     name: "plan_group_outing",
     label: "Plan group outing",
-    description: "Build fairness-aware restaurant recommendations from individual tastes and optional Qloo place insights.",
+    description: "Build fairness-aware restaurant recommendations from individual tastes and hard constraints.",
     actionType: "group.plan",
     riskLevel: "low",
     permissions: [
       {
         provider: "none",
-        label: "Qloo taste (optional)",
-        description: "Uses QLOO_API_KEY when set. Falls back to labelled preference matching if Qloo is unavailable.",
-        envVarsAny: ["QLOO_API_KEY"],
+        label: "Web search (optional)",
+        description: "Uses TAVILY_API_KEY or BRAVE_SEARCH_API_KEY when set. Falls back to stated likes.",
+        envVarsAny: ["TAVILY_API_KEY", "BRAVE_SEARCH_API_KEY"],
         settingsPath: "/settings?tab=integrations",
       },
     ],

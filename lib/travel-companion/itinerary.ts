@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { QlooEntity, QlooTasteResult } from "@/lib/qloo/types";
+import type { TasteSnapshot } from "@/lib/taste/snapshot";
 import type { DayPart, Interest, Pace } from "./constants";
 import { DAY_PARTS } from "./constants";
 import type { TravelActivity, TravelDay, TravelIntake, TravelItinerary } from "./types";
@@ -60,39 +60,29 @@ export function activitiesOverlap(a: TravelActivity, b: TravelActivity): boolean
   return overlap(a, b);
 }
 
-function qlooPlaceForSlot(qloo: QlooTasteResult, slotKey: number): QlooEntity | null {
-  if (qloo.source !== "qloo") return null;
-  const places = qloo.entities.filter((item) => item.name.trim());
+function placeForSlot(taste: TasteSnapshot, slotKey: number) {
+  if (taste.source !== "web_search") return null;
+  const places = taste.places.filter((item) => item.name.trim());
   if (places.length === 0) return null;
   return places[Math.abs(slotKey) % places.length];
 }
 
-function qlooHints(
-  qloo: QlooTasteResult,
+function suggestionHints(
+  taste: TasteSnapshot,
   interest: Interest,
   slotKey: number
-): { title?: string; location?: string; evidence?: string } {
-  const place = qlooPlaceForSlot(qloo, slotKey);
-  if (place) {
-    const where = [place.address, place.neighborhood].filter(Boolean).join(", ");
-    return {
-      title: place.name,
-      location: where || undefined,
-      evidence: `Qloo returned “${place.name}” as a place candidate for this destination and the traveler's ${interest} interest. Hours, tickets, and prices are unverified.`,
-    };
-  }
-  if (qloo.source !== "qloo") return {};
-  const tag = qloo.tags[Math.abs(slotKey) % Math.max(qloo.tags.length, 1)];
-  if (!tag?.name) return {};
+): { title?: string; evidence?: string } {
+  const place = placeForSlot(taste, slotKey);
+  if (!place) return {};
   return {
-    title: `${INTEREST_LABEL[interest]} inspired by ${tag.name}`,
-    evidence: `Qloo returned the taste tag “${tag.name}” for the traveler's stated ${interest} interest. This is not a verified venue, reservation, or price.`,
+    title: place.name,
+    evidence: `Web search returned “${place.name}” for this destination and the traveler's ${interest} interest. Hours, tickets, and prices are unverified.`,
   };
 }
 
 function buildActivity(params: {
   intake: TravelIntake;
-  qloo: QlooTasteResult;
+  taste: TasteSnapshot;
   dayIndex: number;
   dayDate: string;
   part: DayPart;
@@ -101,8 +91,8 @@ function buildActivity(params: {
   interest: Interest;
   slotKey: number;
 }): TravelActivity {
-  const hint = qlooHints(params.qloo, params.interest, params.slotKey);
-  const qlooInformed = Boolean(hint.title);
+  const hint = suggestionHints(params.taste, params.interest, params.slotKey);
+  const informed = Boolean(hint.title);
   const area = params.intake.startingArea ? ` near ${params.intake.startingArea}` : "";
   const title =
     hint.title ??
@@ -128,18 +118,16 @@ function buildActivity(params: {
     endTime: params.end,
     title,
     category: params.interest,
-    location: hint.location
-      ? `${hint.location} (${params.intake.destination}; hours unverified)`
-      : `${params.intake.destination}${area} (address unknown)`,
+    location: `${params.intake.destination}${area} (address unknown)`,
     durationMinutes: minutesBetween(params.start, params.end),
     estimatedCostPerPerson: null,
     costVerified: false,
-    reason: qlooInformed
-      ? hint.evidence ?? "Matched from Qloo taste data and the traveler's stated interests."
-      : `Planned from the traveler's stated ${params.interest} interest. Qloo taste data was not used for this stop.`,
-    qlooInformed,
-    qlooEvidence: hint.evidence,
-    source: qlooInformed ? "qloo" : "stated_preferences",
+    reason: informed
+      ? hint.evidence ?? "Matched from web search titles and the traveler's stated interests."
+      : `Planned from the traveler's stated ${params.interest} interest. This is not a verified venue, reservation, or price.`,
+    suggestionInformed: informed,
+    suggestionEvidence: hint.evidence,
+    source: informed ? "web_search" : "stated_preferences",
     availability: "unknown",
     hoursVerified: false,
     travelTimeVerified: false,
@@ -148,7 +136,7 @@ function buildActivity(params: {
   };
 }
 
-export function buildTravelItinerary(intake: TravelIntake, qloo: QlooTasteResult): TravelItinerary {
+export function buildTravelItinerary(intake: TravelIntake, taste: TasteSnapshot): TravelItinerary {
   const dates = datesBetween(intake.startDate, intake.endDate);
   const slots = SLOTS[intake.pace];
   const days: TravelDay[] = dates.map((date, dayIndex) => {
@@ -156,7 +144,7 @@ export function buildTravelItinerary(intake: TravelIntake, qloo: QlooTasteResult
       const interest = intake.interests[(dayIndex + slotIndex) % intake.interests.length];
       return buildActivity({
         intake,
-        qloo,
+        taste,
         dayIndex,
         dayDate: date,
         part: slot.part,
@@ -180,9 +168,9 @@ export function buildTravelItinerary(intake: TravelIntake, qloo: QlooTasteResult
   }
 
   const missingInformation =
-    qloo.source === "qloo" && qloo.entities.length > 0
+    taste.source === "web_search" && taste.places.length > 0
       ? [
-          "Place names came from Qloo. Opening hours, tickets, and live prices are still unverified.",
+          "Stop titles came from web search. Opening hours, tickets, and live prices are still unverified.",
           "No routing provider is configured, so travel times are unknown.",
           "Costs are unknown until a venue or ticket provider confirms them.",
         ]
@@ -224,7 +212,7 @@ export function itineraryFingerprint(intake: TravelIntake): string {
     .digest("hex");
 }
 
-export function replaceActivity(itinerary: TravelItinerary, activityId: string, intake: TravelIntake, qloo: QlooTasteResult): TravelItinerary {
+export function replaceActivity(itinerary: TravelItinerary, activityId: string, intake: TravelIntake, taste: TasteSnapshot): TravelItinerary {
   const nextDays = itinerary.days.map((day) => ({
     ...day,
     activities: day.activities.map((activity) => {
@@ -232,7 +220,7 @@ export function replaceActivity(itinerary: TravelItinerary, activityId: string, 
       const nextInterest = intake.interests[(activity.dayIndex + 1) % intake.interests.length];
       return buildActivity({
         intake,
-        qloo,
+        taste,
         dayIndex: activity.dayIndex,
         dayDate: activity.dayDate,
         part: activity.part,
@@ -261,7 +249,7 @@ export function regenerateDay(
   itinerary: TravelItinerary,
   dayIndex: number,
   intake: TravelIntake,
-  qloo: QlooTasteResult
+  taste: TasteSnapshot
 ): TravelItinerary {
   const slots = SLOTS[intake.pace];
   return {
@@ -273,7 +261,7 @@ export function regenerateDay(
         activities: slots.map((slot, slotIndex) =>
           buildActivity({
             intake,
-            qloo,
+            taste,
             dayIndex,
             dayDate: day.date,
             part: slot.part,

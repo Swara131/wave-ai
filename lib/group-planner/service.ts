@@ -5,9 +5,9 @@ import { updateBuilderAgent } from "@/lib/agents/repository";
 import type { BuilderAgentRecord } from "@/lib/agents/runtime-types";
 import { evaluateToolThroughControlLayer } from "@/lib/agents/runtime/control/control-layer";
 import { loadedAgentFromRecord } from "@/lib/lighting-concierge/loaded-agent";
-import { fetchGroupDiningTaste } from "@/lib/qloo/client";
 import { executionStatusFromSafety, trackGalleryTemplateRun } from "@/lib/templates/execution-record";
-import type { QlooTasteResult } from "@/lib/qloo/types";
+import { emptyTaste } from "@/lib/taste/snapshot";
+import { fetchWebPlaceHints } from "@/lib/taste/web-places";
 import { missionConfigEnablesLock } from "@/lib/safety/mission";
 import {
   GROUP_MISSION,
@@ -27,7 +27,7 @@ import {
   updateGroupOuting,
   groupOutingsFromSafety,
 } from "./repository";
-import { candidatesFromQloo, pickThreeRecommendations } from "./score";
+import { candidatesFromPlaces, candidatesFromPreferences, pickThreeRecommendations } from "./score";
 import type {
   GroupFeedback,
   GroupIntake,
@@ -63,15 +63,8 @@ async function ensureGroupMission(
   return agent;
 }
 
-function emptyQloo(): QlooTasteResult {
-  return {
-    source: "fallback",
-    queriedAt: new Date().toISOString(),
-    endpoint: "",
-    tags: [],
-    entities: [],
-    usedSignals: [],
-  };
+function emptyTasteSnapshot() {
+  return emptyTaste();
 }
 
 function emptySafety(reason = "Draft saved."): GroupSafetyRecord {
@@ -147,7 +140,7 @@ async function persistOuting(
       userId: refreshed.userId,
       patch: {
         intake: refreshed.intake,
-        qloo: refreshed.qloo,
+        taste: refreshed.taste,
         candidates: refreshed.candidates,
         recommendations: refreshed.recommendations,
         feedback: refreshed.feedback,
@@ -240,7 +233,7 @@ export async function saveGroupOuting(params: {
         agentId: agent.id,
         idempotencyKey: key,
         intake: params.intake,
-        qloo: emptyQloo(),
+        taste: emptyTasteSnapshot(),
         candidates: [],
         recommendations: [],
         feedback: [],
@@ -281,12 +274,22 @@ export async function discoverGroupRestaurants(params: {
     ...person.likes,
     person.preferredCuisines ?? "",
   ]);
-  const qloo = await fetchGroupDiningTaste({ city: outing.intake.city, likeQueries: likes });
-  const candidates = candidatesFromQloo(
-    qloo.entities,
-    qloo.queriedAt,
-    qloo.source === "qloo" ? "qloo" : "stated_preferences"
+  const retrievedAt = new Date().toISOString();
+  const taste = await fetchWebPlaceHints({
+    query: `${outing.intake.city} restaurants ${likes.filter(Boolean).slice(0, 4).join(" ")}`.trim(),
+    signals: [outing.intake.city, ...likes],
+  });
+  const preferenceCandidates = candidatesFromPreferences(outing.intake, retrievedAt);
+  const searchCandidates = candidatesFromPlaces(
+    taste.places.map((place) => ({
+      id: place.url ?? place.name,
+      name: place.name,
+      tags: place.snippet ? [place.snippet] : [],
+    })),
+    taste.queriedAt,
+    "web_search"
   );
+  const candidates = [...preferenceCandidates, ...searchCandidates];
   const picked = pickThreeRecommendations(candidates, outing.intake, outing.feedback);
   const safety = controlToSafety({
     decision: control.decision,
@@ -303,7 +306,7 @@ export async function discoverGroupRestaurants(params: {
     agent,
     {
       ...outing,
-      qloo,
+      taste,
       candidates,
       recommendations: picked.recommendations,
       tooFewReason: picked.tooFewReason,
@@ -313,9 +316,9 @@ export async function discoverGroupRestaurants(params: {
         {
           at: new Date().toISOString(),
           summary:
-            qloo.source === "qloo"
-              ? `Qloo returned ${candidates.length} place candidates.`
-              : `Qloo fallback: ${qloo.error ?? "no live restaurant list"}. WAVE did not invent restaurants.`,
+            taste.source === "web_search"
+              ? `Ranked ${candidates.length} option(s) from stated likes and web search titles.`
+              : `Ranked ${preferenceCandidates.length} option(s) from stated likes. WAVE did not invent restaurants.`,
         },
       ].slice(-40),
     },
@@ -533,7 +536,7 @@ function trackGroupRun(
       outingId: outing.id,
       recommendations: outing.recommendations,
       tooFewReason: outing.tooFewReason,
-      qlooSource: outing.qloo.source,
+      suggestionSource: outing.taste.source,
       reservation: outing.reservation
         ? { id: outing.reservation.id, status: outing.reservation.status }
         : null,
@@ -542,7 +545,7 @@ function trackGroupRun(
     safetyDecision: outing.safety.decision,
     approvalState: outing.safety.approvalStatus,
     errorMessage: status === "failed" ? outing.tooFewReason : null,
-    sources: [outing.qloo.source === "qloo" ? "qloo" : "stated_preferences"],
+    sources: [outing.taste.source],
   });
 }
 

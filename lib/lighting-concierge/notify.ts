@@ -41,7 +41,7 @@ export async function notifyLightingVisitRequest(
       executionStatus: executionStatusFromSafety(params.job.safety.decision),
       safetyDecision: params.job.safety.decision,
       approvalState: params.job.safety.approvalStatus,
-      sources: [params.job.qloo.source === "qloo" ? "qloo" : "stated_preferences"],
+      sources: ["stated_preferences", "rate_table"],
     });
     const notificationId = run
       ? (

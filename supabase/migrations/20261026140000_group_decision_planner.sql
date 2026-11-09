@@ -1,4 +1,4 @@
--- Group Decision Planner outings: participants, Qloo evidence, recommendations, feedback, reservations.
+-- Group Decision Planner outings: participants, taste snapshot (column qloo kept for existing rows), recommendations, feedback, reservations.
 
 CREATE TABLE IF NOT EXISTS public.group_outings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

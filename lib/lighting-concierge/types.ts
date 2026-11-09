@@ -1,4 +1,4 @@
-import type { QlooTasteResult } from "@/lib/qloo/types";
+import type { TasteSnapshot } from "@/lib/taste/snapshot";
 import type {
   JobKind,
   LightingPreference,
@@ -130,7 +130,7 @@ export interface LightingJob {
   intake: LightingIntake;
   plan: LightingPlan;
   quote: LightingQuote;
-  qloo: QlooTasteResult;
+  taste: TasteSnapshot;
   safety: LightingSafetyRecord;
   address: AddressVerification;
   appointment: LightingAppointment;

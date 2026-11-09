@@ -98,7 +98,7 @@ export default function TemplatePreviewModal({
           {template.slug === "wedding-celebration-planner" ? (
             <p>
               Try Example sample data (labelled sample, not a live vendor): Ananya &amp; Rohan, Jaipur, 12 Dec 2026,
-              180 guests, ₹8,50,000, garden venue, vegetarian food. WAVE does not use Qloo for this template.
+              180 guests, ₹8,50,000, garden venue, vegetarian food. Vendors must be entered by the organizer.
             </p>
           ) : null}
         </section>

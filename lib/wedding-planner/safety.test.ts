@@ -129,7 +129,7 @@ describe("Wedding planner intake and plan", () => {
     assert.equal(loaded[0]?.intake.eventName, event.intake.eventName);
   });
 
-  it("saves and edits preferences without using Qloo", () => {
+  it("saves and edits preferences from stated details only", () => {
     const first = intake();
     const edited = { ...first, cuisine: "Jain vegetarian only" };
     const plan = buildWeddingPlan(edited);

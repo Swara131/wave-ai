@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
+import { describe, it } from "node:test";
 import type { LoadedAgent } from "@/lib/agents/runtime/types";
-import { fetchGroupDiningTaste, QlooClientError, searchQlooEntities } from "@/lib/qloo/client";
 import { evaluateAction } from "@/lib/safety/gate";
 import { groupDecisionIsAuthorized } from "./approvals";
 import {
@@ -13,7 +12,7 @@ import {
 } from "./constants";
 import { groupIntakeSchema, normalizeGroupIntake } from "./intake";
 import { mergeGroupOutingIntoSafety, groupOutingsFromSafety } from "./repository";
-import { candidatesFromQloo, pickThreeRecommendations, scoreCandidate } from "./score";
+import { candidatesFromPlaces, candidatesFromPreferences, pickThreeRecommendations, scoreCandidate } from "./score";
 import { reservationResourceType } from "./service";
 import type { GroupOuting, RestaurantCandidate } from "./types";
 
@@ -30,7 +29,7 @@ function agent(): LoadedAgent {
       slug: "group-decision-planner-agent",
       description: "Group",
       goal: "Group Decision Planner",
-      instructions: "Use Qloo when configured.",
+      instructions: "Rank from stated likes only.",
       model: null,
       source: "template:group-decision-planner",
       tools: [PLAN_GROUP_TOOL, REQUEST_RESERVATION_TOOL],
@@ -95,7 +94,7 @@ function candidate(partial: Partial<RestaurantCandidate> = {}): RestaurantCandid
     popularity: partial.popularity ?? 0.8,
     affinity: partial.affinity ?? 0.6,
     tags: partial.tags ?? ["vegetarian", "coastal"],
-    source: partial.source ?? "qloo",
+    source: partial.source ?? "stated_preferences",
     retrievedAt: new Date().toISOString(),
     unknownFields: partial.unknownFields ?? ["opening hours", "table availability"],
   };
@@ -188,82 +187,17 @@ describe("Group Decision Planner ranking", () => {
   });
 });
 
-describe("Group Decision Planner Qloo client", () => {
-  const originalFetch = globalThis.fetch;
-  const originalKey = process.env.QLOO_API_KEY;
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-    if (originalKey === undefined) delete process.env.QLOO_API_KEY;
-    else process.env.QLOO_API_KEY = originalKey;
-  });
-
-  it("falls back when the API key is missing", async () => {
-    const previous = process.env.QLOO_API_KEY;
-    delete process.env.QLOO_API_KEY;
-    const result = await fetchGroupDiningTaste({ city: "Mumbai", likeQueries: ["ramen"] });
-    if (previous === undefined) delete process.env.QLOO_API_KEY;
-    else process.env.QLOO_API_KEY = previous;
-    assert.equal(result.source, "fallback");
-    assert.equal(result.errorKind, "missing_key");
-    assert.equal(result.entities.length, 0);
-  });
-
-  it("resolves entities and places from Qloo payloads", async () => {
-    const previous = process.env.QLOO_API_KEY;
-    process.env.QLOO_API_KEY = "test-qloo-key";
-    globalThis.fetch = (async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes("/v2/tags")) {
-        return new Response(JSON.stringify({ results: { tags: [{ tag_id: "urn:tag:genre:music:indie", name: "Indie" }] } }), { status: 200 });
-      }
-      if (url.includes("/search") || url.includes("/v2/search")) {
-        return new Response(JSON.stringify({ results: { entities: [{ entity_id: "urn:entity:artist:radiohead", name: "Radiohead" }] } }), { status: 200 });
-      }
-      if (url.includes("urn:entity:place") || url.includes("urn%3Aentity%3Aplace")) {
-        return new Response(
-          JSON.stringify({
-            results: {
-              entities: [
-                {
-                  entity_id: "urn:entity:place:coastal",
-                  name: "Coastal Kitchen",
-                  popularity: 0.4,
-                  properties: { address: "Bandra West" },
-                  query: { affinity: 0.7 },
-                  tags: [{ name: "vegetarian" }],
-                },
-              ],
-            },
-          }),
-          { status: 200 }
-        );
-      }
-      return new Response(JSON.stringify({ results: { entities: [] } }), { status: 200 });
-    }) as typeof fetch;
-    const result = await fetchGroupDiningTaste({ city: "Mumbai", likeQueries: ["Radiohead"] });
-    if (previous === undefined) delete process.env.QLOO_API_KEY;
-    else process.env.QLOO_API_KEY = previous;
-    assert.equal(result.source, "qloo");
-    assert.ok(result.entities.some((item) => item.entityId === "urn:entity:place:coastal"));
-    assert.equal(result.entities[0]?.address, "Bandra West");
-  });
-
-  it("classifies Qloo rate limits", async () => {
-    const previous = process.env.QLOO_API_KEY;
-    process.env.QLOO_API_KEY = "test-qloo-key";
-    globalThis.fetch = (async () => new Response("slow", { status: 429 })) as typeof fetch;
-    await assert.rejects(() => searchQlooEntities("Radiohead"), (err: unknown) => {
-      assert.ok(err instanceof QlooClientError);
-      assert.equal(err.kind, "rate_limited");
-      return true;
-    });
-    if (previous === undefined) delete process.env.QLOO_API_KEY;
-    else process.env.QLOO_API_KEY = previous;
-  });
-
-  it("does not invent entity IDs on empty Qloo results", () => {
-    const mapped = candidatesFromQloo([], new Date().toISOString(), "qloo");
+describe("Group Decision Planner candidates", () => {
+  it("does not invent restaurants from an empty place list", () => {
+    const mapped = candidatesFromPlaces([], new Date().toISOString(), "web_search");
     assert.equal(mapped.length, 0);
+  });
+
+  it("builds labelled preference matches from stated likes", () => {
+    const mapped = candidatesFromPreferences(intake(), new Date().toISOString());
+    assert.ok(mapped.length >= 3);
+    assert.ok(mapped.every((item) => item.source === "stated_preferences"));
+    assert.ok(mapped.every((item) => /Mumbai/i.test(item.name)));
   });
 });
 
@@ -326,7 +260,7 @@ describe("Group Decision Planner safety", () => {
       agentId: "a",
       idempotencyKey: "k",
       intake: intake(),
-      qloo: { source: "fallback", queriedAt: new Date().toISOString(), endpoint: "", tags: [], entities: [], usedSignals: [] },
+      taste: { source: "stated_preferences", queriedAt: new Date().toISOString(), usedSignals: [], places: [] },
       candidates: [],
       recommendations: [],
       feedback: [],

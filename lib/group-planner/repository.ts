@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AgentSafetySettings } from "@/lib/agents/runtime-types";
+import { mapStoredTaste } from "@/lib/taste/snapshot";
 import type { GroupOuting } from "./types";
 
 function isMissingTable(message: string | undefined): boolean {
@@ -22,7 +23,12 @@ export function groupOutingsFromSafety(value: unknown): GroupOuting[] {
   if (!value || typeof value !== "object") return [];
   const outings = (value as { groupPlanner?: { outings?: unknown } }).groupPlanner?.outings;
   if (!Array.isArray(outings)) return [];
-  return outings.filter((item): item is GroupOuting => Boolean(item && typeof item === "object" && "id" in item));
+  return outings
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && "id" in item))
+    .map((item) => ({
+      ...(item as unknown as GroupOuting),
+      taste: mapStoredTaste((item as { taste?: unknown; qloo?: unknown }).taste ?? (item as { qloo?: unknown }).qloo),
+    }));
 }
 
 export function mergeGroupOutingIntoSafety(safety: AgentSafetySettings, outing: GroupOuting): AgentSafetySettings {
@@ -45,7 +51,7 @@ function mapOuting(row: Record<string, unknown>): GroupOuting {
     agentId: String(row.agent_id),
     idempotencyKey: String(row.idempotency_key ?? ""),
     intake: row.intake as GroupOuting["intake"],
-    qloo: row.qloo as GroupOuting["qloo"],
+    taste: mapStoredTaste(row.taste ?? row.qloo),
     candidates: (row.candidates as GroupOuting["candidates"]) ?? [],
     recommendations: (row.recommendations as GroupOuting["recommendations"]) ?? [],
     feedback: (row.feedback as GroupOuting["feedback"]) ?? [],
@@ -124,7 +130,7 @@ export async function insertGroupOuting(supabase: SupabaseClient, outing: GroupO
       agent_id: outing.agentId,
       idempotency_key: outing.idempotencyKey,
       intake: outing.intake,
-      qloo: outing.qloo,
+      qloo: outing.taste,
       candidates: outing.candidates,
       recommendations: outing.recommendations,
       feedback: outing.feedback,
@@ -149,7 +155,7 @@ export async function updateGroupOuting(
 ): Promise<GroupOuting> {
   const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (params.patch.intake) row.intake = params.patch.intake;
-  if (params.patch.qloo) row.qloo = params.patch.qloo;
+  if (params.patch.taste) row.qloo = params.patch.taste;
   if (params.patch.candidates) row.candidates = params.patch.candidates;
   if (params.patch.recommendations) row.recommendations = params.patch.recommendations;
   if (params.patch.feedback) row.feedback = params.patch.feedback;

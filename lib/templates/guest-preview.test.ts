@@ -30,7 +30,7 @@ describe("runGuestTemplatePreview", () => {
     );
   });
 
-  it("builds a wedding preview without Qloo and without persisting", async () => {
+  it("builds a wedding preview without persisting", async () => {
     const result = await runGuestTemplatePreview("wedding-celebration-planner", {
       eventName: "Mehra garden wedding",
       eventType: "wedding",
@@ -46,7 +46,7 @@ describe("runGuestTemplatePreview", () => {
     assert.equal(result.persisted, false);
     assert.equal(result.slug, "wedding-celebration-planner");
     assert.ok(result.sources.includes("stated_preferences"));
-    assert.ok(result.warnings.some((item) => /does not use Qloo/i.test(item)));
+    assert.ok(result.warnings.some((item) => /Vendors must be entered/i.test(item)));
     assert.ok(result.warnings.some((item) => /not saved/i.test(item)));
   });
 });

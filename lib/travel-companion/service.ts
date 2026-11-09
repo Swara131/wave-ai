@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { updateBuilderAgent } from "@/lib/agents/repository";
 import type { BuilderAgentRecord } from "@/lib/agents/runtime-types";
 import { evaluateToolThroughControlLayer } from "@/lib/agents/runtime/control/control-layer";
-import { fetchTravelTaste } from "@/lib/qloo/client";
+import { fetchWebPlaceHints } from "@/lib/taste/web-places";
 import { executionStatusFromSafety, trackGalleryTemplateRun } from "@/lib/templates/execution-record";
 import { loadedAgentFromRecord } from "@/lib/lighting-concierge/loaded-agent";
 import { missionConfigEnablesLock } from "@/lib/safety/mission";
@@ -73,7 +73,7 @@ async function persistTrip(
     return await updateTravelTrip(admin, {
       tripId: trip.id,
       userId: agent.userId,
-      patch: { itinerary: trip.itinerary, safety: trip.safety, bookings: trip.bookings, qloo: trip.qloo },
+      patch: { itinerary: trip.itinerary, safety: trip.safety, bookings: trip.bookings, taste: trip.taste },
     });
   } catch (error) {
     if (!isMissingTravelTable(error)) throw error;
@@ -143,11 +143,8 @@ function bookingResourceType(params: {
   return "pending_request";
 }
 
-const TRANSIENT_QLOO_ERRORS = new Set(["timeout", "unauthorized", "unavailable", "rate_limited"]);
-
 export function shouldReusePlannedTrip(trip: TravelTrip): boolean {
-  const kind = trip.qloo.errorKind;
-  if (kind && TRANSIENT_QLOO_ERRORS.has(kind)) return false;
+  if (trip.taste.error && trip.taste.places.length === 0) return false;
   return true;
 }
 
@@ -180,12 +177,16 @@ export async function planTravelTrip(params: {
     }
   }
 
-  const qloo = await fetchTravelTaste({
-    destination: params.intake.destination,
-    interests: params.intake.interests,
-    extraQueries: [params.intake.favoriteCuisines ?? "", params.intake.culturalInterests ?? ""],
+  const taste = await fetchWebPlaceHints({
+    query: `${params.intake.destination} ${params.intake.interests.slice(0, 3).join(" ")} things to do`.trim(),
+    signals: [
+      params.intake.destination,
+      ...params.intake.interests,
+      params.intake.favoriteCuisines ?? "",
+      params.intake.culturalInterests ?? "",
+    ],
   });
-  const itinerary = buildTravelItinerary(params.intake, qloo);
+  const itinerary = buildTravelItinerary(params.intake, taste);
   const tripId = params.replanTripId ?? randomUUID();
   const control = await evaluateToolThroughControlLayer(admin, {
     agent: loaded,
@@ -212,7 +213,7 @@ export async function planTravelTrip(params: {
         ...existingTrip,
         intake: params.intake,
         itinerary,
-        qloo,
+        taste,
         safety: controlToSafety({
           decision: control.decision,
           actionType: PLAN_ITINERARY_ACTION,
@@ -238,7 +239,7 @@ export async function planTravelTrip(params: {
     idempotencyKey,
     intake: params.intake,
     itinerary,
-    qloo,
+    taste,
     safety: controlToSafety({
       decision: control.decision,
       actionType: PLAN_ITINERARY_ACTION,
@@ -275,9 +276,9 @@ export async function mutateTravelTrip(params: {
     itinerary = removeActivity(trip.itinerary, params.activityId);
   } else if (params.action === "replace") {
     if (!params.activityId) throw new Error("Select an activity to replace.");
-    itinerary = replaceActivity(trip.itinerary, params.activityId, trip.intake, trip.qloo);
+    itinerary = replaceActivity(trip.itinerary, params.activityId, trip.intake, trip.taste);
   } else {
-    itinerary = regenerateDay(trip.itinerary, params.dayIndex ?? 0, trip.intake, trip.qloo);
+    itinerary = regenerateDay(trip.itinerary, params.dayIndex ?? 0, trip.intake, trip.taste);
   }
   return persistTrip(
     admin,
@@ -426,7 +427,7 @@ function trackTravelRun(
     resultPayload: {
       tripId: trip.id,
       itinerary: trip.itinerary,
-      qlooSource: trip.qloo.source,
+      suggestionSource: trip.taste.source,
       bookings: trip.bookings.map((item) => ({
         id: item.id,
         status: item.status,
@@ -436,7 +437,7 @@ function trackTravelRun(
     executionStatus: executionStatusFromSafety(trip.safety.decision),
     safetyDecision: trip.safety.decision,
     approvalState: trip.safety.approvalStatus,
-    sources: [trip.qloo.source === "qloo" ? "qloo" : "stated_preferences"],
+    sources: [trip.taste.source],
   });
 }
 

@@ -78,7 +78,7 @@ export const SAMPLE_WEDDING_INTAKE = {
 };
 
 export const WEDDING_MISSION = {
-  goal: "Plan weddings and celebrations from stated preferences, compare user-entered vendors, draft invitations, and create pending deposit requests. Never invent vendors, quotes, availability, or paid status. Never use Qloo.",
+  goal: "Plan weddings and celebrations from stated preferences, compare user-entered vendors, draft invitations, and create pending deposit requests. Never invent vendors, quotes, availability, or paid status.",
   allowedTools: [PLAN_WEDDING_TOOL, REQUEST_DEPOSIT_TOOL],
   allowedActions: [PLAN_WEDDING_ACTION, REQUEST_DEPOSIT_ACTION],
 };

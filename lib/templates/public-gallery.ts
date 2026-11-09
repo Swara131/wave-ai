@@ -18,7 +18,6 @@ export interface PublicGalleryTemplate {
   capabilities: string[];
   previewHref: string;
   signInHref: string;
-  usesQloo: boolean;
 }
 
 const CAPABILITIES: Record<PublicGallerySlug, string[]> = {
@@ -65,7 +64,6 @@ export function getPublicGalleryTemplates(): PublicGalleryTemplate[] {
       capabilities: CAPABILITIES[slug],
       previewHref: `/preview/${slug}`,
       signInHref: `/login?redirectTo=${encodeURIComponent(`/preview/${slug}`)}`,
-      usesQloo: slug !== "wedding-celebration-planner",
     };
   });
 }

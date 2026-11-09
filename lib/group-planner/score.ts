@@ -109,10 +109,10 @@ export function scoreCandidate(
     if (cuisineHits) explanationParts.push("cuisine overlap with stated preferences");
     else explanationParts.push("limited cuisine overlap");
     if (likeHits) explanationParts.push("some stated likes appear in tags or name");
-    if (candidate.source === "qloo" && candidate.affinity != null) {
-      explanationParts.push("Qloo affinity is evidence of taste compatibility, not a guarantee");
-    } else if (candidate.source !== "qloo") {
-      explanationParts.push("not a Qloo restaurant result");
+    if (candidate.source === "web_search") {
+      explanationParts.push("web search titles are public mentions, not verified restaurants");
+    } else {
+      explanationParts.push("ranked from stated likes and constraints only");
     }
     if (dislikeHits) explanationParts.push("possible overlap with stated dislikes");
     return {
@@ -153,7 +153,7 @@ export function scoreCandidate(
     rejectReasons,
     unknownFlags: [...new Set(unknownFlags)],
     tradeoffs: `Weakest match: ${weakest.displayName} (${weakest.qualitative}, ${weakest.score}). Unknown: ${[...new Set(unknownFlags)].join(", ") || "none listed"}.`,
-    explanation: `Group score ${Math.round(blended)} using visible weights taste ${SCORE_WEIGHTS.taste}, budget ${SCORE_WEIGHTS.budget}, travel ${SCORE_WEIGHTS.travel}, diet ${SCORE_WEIGHTS.diet}, fairness ${SCORE_WEIGHTS.fairness}. Qloo affinities are evidence only.`,
+    explanation: `Group score ${Math.round(blended)} using visible weights taste ${SCORE_WEIGHTS.taste}, budget ${SCORE_WEIGHTS.budget}, travel ${SCORE_WEIGHTS.travel}, diet ${SCORE_WEIGHTS.diet}, fairness ${SCORE_WEIGHTS.fairness}. Rankings are not live availability.`,
   };
 }
 
@@ -188,7 +188,9 @@ export function pickThreeRecommendations(
   const fairestPool = scored.filter((item) => !used.has(item.candidate.id));
   fairestPool.sort((a, b) => b.fairnessScore - a.fairnessScore || b.groupScore - a.groupScore);
   const fairest = take(fairestPool[0], "fairest", "Fairest compromise");
-  const discoveryPool = scored.filter((item) => !used.has(item.candidate.id) && item.candidate.source === "qloo");
+  const discoveryPool = scored.filter(
+    (item) => !used.has(item.candidate.id) && item.candidate.source === "web_search"
+  );
   discoveryPool.sort((a, b) => b.discoveryScore - a.discoveryScore);
   const discovery =
     take(discoveryPool[0], "discovery", "Discovery pick") ??
@@ -208,31 +210,31 @@ export function pickThreeRecommendations(
   };
 }
 
-export function candidatesFromQloo(
+export function candidatesFromPlaces(
   entities: Array<{
-    entityId: string;
+    id?: string;
     name: string;
-    subtype?: string;
-    popularity?: number;
+    cuisine?: string;
     address?: string;
     neighborhood?: string;
-    affinity?: number;
     tags?: string[];
+    url?: string;
   }>,
   retrievedAt: string,
-  source: "qloo" | "stated_preferences"
+  source: RestaurantCandidate["source"]
 ): RestaurantCandidate[] {
   return entities
-    .filter((entity) => entity.entityId && entity.name)
-    .map((entity) => {
+    .filter((entity) => entity.name.trim())
+    .map((entity, index) => {
       const unknownFields: string[] = [];
       if (!entity.address) unknownFields.push("address");
       unknownFields.push("opening hours", "price", "travel time", "table availability");
+      const id = entity.id?.trim() || `${source}:${entity.name.toLowerCase()}:${index}`;
       return {
-        id: entity.entityId,
-        name: entity.name,
-        entityId: entity.entityId,
-        cuisine: entity.tags?.[0],
+        id,
+        name: entity.name.trim(),
+        entityId: null,
+        cuisine: entity.cuisine,
         address: entity.address,
         neighborhood: entity.neighborhood,
         estimatedCostPerPerson: null,
@@ -240,12 +242,32 @@ export function candidatesFromQloo(
         distanceMinutes: null,
         openingHours: null,
         availability: "unverified" as const,
-        popularity: entity.popularity ?? null,
-        affinity: entity.affinity ?? null,
+        popularity: null,
+        affinity: null,
         tags: entity.tags ?? [],
         source,
         retrievedAt,
         unknownFields,
       };
     });
+}
+
+export function candidatesFromPreferences(intake: GroupIntake, retrievedAt: string): RestaurantCandidate[] {
+  const seen = new Set<string>();
+  const rows: Array<{ id: string; name: string; cuisine?: string; tags: string[] }> = [];
+  for (const person of intake.participants) {
+    const likes = [...person.likes, person.preferredCuisines ?? ""].map((item) => item.trim()).filter(Boolean);
+    for (const like of likes) {
+      const key = like.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({
+        id: `pref:${intake.city.toLowerCase()}:${key}`,
+        name: `${like} in ${intake.city}`,
+        cuisine: like,
+        tags: [like, person.neighborhood ?? ""].filter(Boolean),
+      });
+    }
+  }
+  return candidatesFromPlaces(rows, retrievedAt, "stated_preferences");
 }

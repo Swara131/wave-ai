@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AgentSafetySettings } from "@/lib/agents/runtime-types";
+import { mapStoredTaste } from "@/lib/taste/snapshot";
 import type { LightingJob, LightingRates } from "./types";
 
 function isMissingTable(message: string | undefined): boolean {
@@ -21,7 +22,12 @@ export function lightingJobsFromSafety(value: unknown): LightingJob[] {
   if (!value || typeof value !== "object") return [];
   const jobs = (value as { lightingConcierge?: { jobs?: unknown } }).lightingConcierge?.jobs;
   if (!Array.isArray(jobs)) return [];
-  return jobs.filter((item): item is LightingJob => Boolean(item && typeof item === "object" && "id" in item));
+  return jobs
+    .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && "id" in item))
+    .map((item) => ({
+      ...(item as unknown as LightingJob),
+      taste: mapStoredTaste((item as { taste?: unknown; qloo?: unknown }).taste ?? (item as { qloo?: unknown }).qloo),
+    }));
 }
 
 export function mergeLightingJobIntoSafety(
@@ -48,7 +54,7 @@ function mapJob(row: Record<string, unknown>): LightingJob {
     intake: row.intake as LightingJob["intake"],
     plan: row.plan as LightingJob["plan"],
     quote: row.quote as LightingJob["quote"],
-    qloo: row.qloo as LightingJob["qloo"],
+    taste: mapStoredTaste(row.taste ?? row.qloo),
     safety: row.safety as LightingJob["safety"],
     address: row.address as LightingJob["address"],
     appointment: row.appointment as LightingJob["appointment"],
@@ -127,7 +133,7 @@ export async function insertLightingJob(
       intake: job.intake,
       plan: job.plan,
       quote: job.quote,
-      qloo: job.qloo,
+      qloo: job.taste,
       safety: job.safety,
       address: job.address,
       appointment: job.appointment,
@@ -146,7 +152,7 @@ export async function updateLightingJob(
   params: {
     jobId: string;
     userId: string;
-    patch: Partial<Pick<LightingJob, "quote" | "plan" | "safety" | "address" | "appointment" | "qloo">>;
+    patch: Partial<Pick<LightingJob, "quote" | "plan" | "safety" | "address" | "appointment" | "taste">>;
   }
 ): Promise<LightingJob> {
   const { data, error } = await supabase
@@ -157,7 +163,7 @@ export async function updateLightingJob(
       ...(params.patch.safety ? { safety: params.patch.safety } : {}),
       ...(params.patch.address ? { address: params.patch.address } : {}),
       ...(params.patch.appointment ? { appointment: params.patch.appointment } : {}),
-      ...(params.patch.qloo ? { qloo: params.patch.qloo } : {}),
+      ...(params.patch.taste ? { qloo: params.patch.taste } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", params.jobId)

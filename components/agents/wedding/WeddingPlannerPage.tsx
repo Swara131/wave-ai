@@ -197,7 +197,7 @@ export default function WeddingPlannerPage() {
       title: saveDraft ? "Draft saved" : "Plan saved",
       text: saveDraft
         ? "You can continue later. This step is stored on the event."
-        : "Recommendations use only the preferences you entered. WAVE did not call Qloo or invent vendors.",
+        : "Recommendations use only the preferences you entered. WAVE did not invent vendors.",
     });
     return payload.event ?? null;
   };
@@ -361,7 +361,7 @@ export default function WeddingPlannerPage() {
         <section className="lc-card">
           <div className="lc-card-head">
             <h2>Recommendations from stated preferences</h2>
-            <p>Rules-based. No Qloo. Style briefs are not verified businesses.</p>
+            <p>Rules-based. Style briefs are not verified businesses.</p>
           </div>
           {event?.plan ? (
             <>

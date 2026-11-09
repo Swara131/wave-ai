@@ -1,4 +1,3 @@
-import type { QlooTasteResult } from "@/lib/qloo/types";
 import type { LightingPreference, StyleOption } from "./constants";
 import type { LightingIntake, LightingPlan, LightingQuote } from "./types";
 
@@ -7,17 +6,17 @@ const KELVIN: Record<Exclude<LightingPreference, "unsure">, { range: string; exp
     warm: {
       range: "2700K–3000K",
       explanation:
-        "Warm white is a common choice for living rooms and bedrooms because it reads as relaxing. This is general lighting guidance, not a Qloo measurement.",
+        "Warm white is a common choice for living rooms and bedrooms because it reads as relaxing. This is general lighting guidance from the stated preference, not a lab measurement.",
     },
     neutral: {
       range: "3500K–4000K",
       explanation:
-        "Neutral white is often used in kitchens and bathrooms where tasks need clearer contrast. This is general lighting guidance, not a Qloo measurement.",
+        "Neutral white is often used in kitchens and bathrooms where tasks need clearer contrast. This is general lighting guidance from the stated preference, not a lab measurement.",
     },
     cool: {
       range: "4000K–5000K",
       explanation:
-        "Cooler white can help with focused work in offices. Confirm glare and wall colour on site. This is general lighting guidance, not a Qloo measurement.",
+        "Cooler white can help with focused work in offices. Confirm glare and wall colour on site. This is general lighting guidance from the stated preference, not a lab measurement.",
     },
   };
 
@@ -29,7 +28,7 @@ function resolveKelvin(preference: LightingPreference, roomType: LightingIntake[
   return KELVIN.warm;
 }
 
-function styleCopy(style: StyleOption, qloo: QlooTasteResult): string {
+function styleCopy(style: StyleOption, extra?: string): string {
   const base: Record<StyleOption, string> = {
     modern: "Clean lines, simple shades, and uncluttered ceiling fixtures.",
     minimalist: "Fewer fittings, hidden sources, and even ambient wash.",
@@ -38,18 +37,14 @@ function styleCopy(style: StyleOption, qloo: QlooTasteResult): string {
     traditional: "Decorative shades, wall lights, and a warm central fixture.",
     unsure: "A flexible layered scheme that can take either modern or classic fittings.",
   };
-  const qlooNames = qloo.tags.slice(0, 3).map((tag) => tag.name);
-  if (qloo.source === "qloo" && qlooNames.length > 0) {
-    return `${base[style]} Related décor tags from Qloo: ${qlooNames.join(", ")}. Qloo does not measure Kelvin or room suitability.`;
+  const extraNote = extra?.trim();
+  if (extraNote) {
+    return `${base[style]} Extra notes from the customer: ${extraNote}. Style ranking uses the stated preference only.`;
   }
-  return `${base[style]} Style ranking used the customer's stated preference because Qloo taste data was not used.`;
+  return `${base[style]} Style ranking uses the customer's stated preference, budget, and room details.`;
 }
 
-export function buildLightingPlan(
-  intake: LightingIntake,
-  quote: LightingQuote,
-  qloo: QlooTasteResult
-): LightingPlan {
+export function buildLightingPlan(intake: LightingIntake, quote: LightingQuote): LightingPlan {
   const kelvin = resolveKelvin(intake.lightingPreference, intake.roomType);
   const questions = [
     "Confirm switching, dimmers, and existing circuit capacity with a qualified electrician.",
@@ -68,7 +63,7 @@ export function buildLightingPlan(
   }
 
   return {
-    styleAndAmbience: styleCopy(intake.preferredStyle, qloo),
+    styleAndAmbience: styleCopy(intake.preferredStyle, intake.additionalPreferences),
     colourTemperatureKelvin: {
       range: kelvin.range,
       explanation: kelvin.explanation,

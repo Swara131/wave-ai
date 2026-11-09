@@ -2,13 +2,13 @@ import { z } from "zod";
 import { lightingIntakeSchema, normalizeLightingIntake } from "@/lib/lighting-concierge/intake";
 import { buildLightingPlan } from "@/lib/lighting-concierge/plan";
 import { buildLightingQuote, defaultLightingRates } from "@/lib/lighting-concierge/pricing";
-import { fetchGroupDiningTaste, fetchLightingTaste, fetchTravelTaste } from "@/lib/qloo/client";
+import { fetchWebPlaceHints } from "@/lib/taste/web-places";
 import { travelIntakeSchema, normalizeTravelIntake } from "@/lib/travel-companion/intake";
 import { buildTravelItinerary } from "@/lib/travel-companion/itinerary";
 import { weddingIntakeSchema, normalizeWeddingIntake } from "@/lib/wedding-planner/intake";
 import { buildBudget, buildWeddingPlan, compareVendors } from "@/lib/wedding-planner/plan";
 import { groupIntakeSchema, normalizeGroupIntake } from "@/lib/group-planner/intake";
-import { candidatesFromQloo, pickThreeRecommendations } from "@/lib/group-planner/score";
+import { candidatesFromPlaces, candidatesFromPreferences, pickThreeRecommendations } from "@/lib/group-planner/score";
 import { getPublicGalleryTemplates, isPublicGallerySlug, type PublicGallerySlug } from "./public-gallery";
 
 export type PreviewExecutionStatus = "preview" | "completed" | "failed";
@@ -43,16 +43,12 @@ export async function runGuestTemplatePreview(
     const normalized = normalizeLightingIntake(parsed.data);
     const rates = defaultLightingRates();
     const quote = buildLightingQuote(normalized, rates);
-    const qloo = await fetchLightingTaste({
-      style: normalized.preferredStyle,
-      extraQueries: [normalized.additionalPreferences ?? "", `${normalized.preferredStyle} interior design`],
-    });
-    const plan = buildLightingPlan(normalized, quote, qloo);
+    const plan = buildLightingPlan(normalized, quote);
     const warnings = [
       "Guest preview is not saved to an account.",
       "WAVE will not book an electrician from this preview.",
       quote.complete ? null : "The estimate is incomplete because some quantities were assumed.",
-      qloo.source === "qloo" ? null : qloo.error ?? "Qloo was not used. Plan uses stated preferences only.",
+      "Plan uses stated room details, style, budget, and the rate table.",
     ].filter((item): item is string => Boolean(item));
     return {
       slug,
@@ -61,13 +57,12 @@ export async function runGuestTemplatePreview(
       preview: true,
       persisted: false,
       summary: `${plan.styleAndAmbience.slice(0, 140)} Estimate ₹${quote.totalInr.toLocaleString("en-IN")} (non-binding).`,
-      sources: [qloo.source === "qloo" ? "qloo" : "stated_preferences", "rate_table"],
+      sources: ["stated_preferences", "rate_table"],
       warnings,
       result: {
         intake: { ...normalized, contactEmail: undefined, contactPhone: undefined },
         plan,
         quote,
-        qloo: { source: qloo.source, queriedAt: qloo.queriedAt, error: qloo.error ?? null, tags: qloo.tags.slice(0, 8) },
       },
     };
   }
@@ -76,18 +71,17 @@ export async function runGuestTemplatePreview(
     const parsed = travelIntakeSchema.safeParse(intake);
     if (!parsed.success) throw new PreviewValidationError(parsed.error.issues[0]?.message ?? "Invalid travel intake.");
     const normalized = normalizeTravelIntake(parsed.data);
-    const qloo = await fetchTravelTaste({
-      destination: normalized.destination,
-      interests: normalized.interests,
-      extraQueries: [normalized.favoriteCuisines ?? ""],
+    const taste = await fetchWebPlaceHints({
+      query: `${normalized.destination} ${normalized.interests.slice(0, 3).join(" ")} things to do`.trim(),
+      signals: [normalized.destination, ...normalized.interests, normalized.favoriteCuisines ?? ""],
     });
-    const itinerary = buildTravelItinerary(normalized, qloo);
+    const itinerary = buildTravelItinerary(normalized, taste);
     const warnings = [
       "Guest preview is not saved to an account.",
       "No tickets or reservations are created from this preview.",
       itinerary.conflicts.length ? itinerary.conflicts.join(" ") : null,
       itinerary.missingInformation.slice(0, 2).join(" ") || null,
-      qloo.source === "qloo" ? null : qloo.error ?? "Qloo was not used. Stops are labelled from stated interests.",
+      taste.source === "web_search" ? null : taste.error ?? "Stops are labelled from stated interests.",
     ].filter((item): item is string => Boolean(item));
     return {
       slug,
@@ -96,9 +90,9 @@ export async function runGuestTemplatePreview(
       preview: true,
       persisted: false,
       summary: `${itinerary.days.length}-day plan for ${normalized.destination}. Prices and hours are unverified.`,
-      sources: [qloo.source === "qloo" ? "qloo" : "stated_preferences"],
+      sources: [taste.source],
       warnings,
-      result: { intake: normalized, itinerary, qloo: { source: qloo.source, queriedAt: qloo.queriedAt, error: qloo.error ?? null } },
+      result: { intake: normalized, itinerary, taste: { source: taste.source, queriedAt: taste.queriedAt, error: taste.error ?? null } },
     };
   }
 
@@ -119,7 +113,7 @@ export async function runGuestTemplatePreview(
       sources: ["stated_preferences"],
       warnings: [
         "Guest preview is not saved to an account.",
-        "WAVE does not use Qloo for this template.",
+        "Vendors must be entered by the organizer after sign-in.",
         "No vendors were invented. Add real quotes after you sign in.",
         "No deposit or invitation is sent from this preview.",
       ],
@@ -131,18 +125,25 @@ export async function runGuestTemplatePreview(
   if (!parsed.success) throw new PreviewValidationError(parsed.error.issues[0]?.message ?? "Invalid group intake.");
   const normalized = normalizeGroupIntake(parsed.data);
   const likes = normalized.participants.flatMap((person) => [...person.likes, person.preferredCuisines ?? ""]);
-  const qloo = await fetchGroupDiningTaste({ city: normalized.city, likeQueries: likes });
-  const candidates = candidatesFromQloo(
-    qloo.entities,
-    qloo.queriedAt,
-    qloo.source === "qloo" ? "qloo" : "stated_preferences"
-  );
+  const retrievedAt = new Date().toISOString();
+  const taste = await fetchWebPlaceHints({
+    query: `${normalized.city} restaurants ${likes.filter(Boolean).slice(0, 4).join(" ")}`.trim(),
+    signals: [normalized.city, ...likes],
+  });
+  const candidates = [
+    ...candidatesFromPreferences(normalized, retrievedAt),
+    ...candidatesFromPlaces(
+      taste.places.map((place) => ({ id: place.url ?? place.name, name: place.name })),
+      taste.queriedAt,
+      "web_search"
+    ),
+  ];
   const picked = pickThreeRecommendations(candidates, normalized, []);
   const warnings = [
     "Guest preview is not saved to an account.",
     "WAVE will not reserve a table from this preview.",
     picked.tooFewReason,
-    qloo.source === "qloo" ? null : qloo.error ?? "Qloo was not used. WAVE did not invent restaurants.",
+    taste.source === "web_search" ? null : taste.error ?? "WAVE did not invent restaurants.",
   ].filter((item): item is string => Boolean(item));
   return {
     slug,
@@ -153,14 +154,14 @@ export async function runGuestTemplatePreview(
     summary: picked.recommendations.length
       ? `Ranked ${picked.recommendations.length} restaurant option(s) in ${normalized.city}.`
       : picked.tooFewReason ?? "Not enough valid restaurant candidates.",
-    sources: [qloo.source === "qloo" ? "qloo" : "stated_preferences"],
+    sources: [taste.source],
     warnings,
     result: {
       intake: normalized,
       recommendations: picked.recommendations,
       tooFewReason: picked.tooFewReason,
       candidateCount: candidates.length,
-      qloo: { source: qloo.source, queriedAt: qloo.queriedAt, error: qloo.error ?? null },
+      taste: { source: taste.source, queriedAt: taste.queriedAt, error: taste.error ?? null },
     },
   };
 }
